@@ -46,7 +46,7 @@ graph TD;
     subgraph Intelligence & Execution
         AI_Dexter(Dexter Analyst AI)
         AI_Miro(MiroFish Swarm AI)
-        AnthropicAPI[Anthropic Claude 3.5]
+        AnthropicAPI[Anthropic Claude opus 4.6]
         
         Relay(Network Relay & Node Selector)
         RPC[Solana Mainnet RPC Nodes]
