@@ -13,9 +13,10 @@ use tracing::{error, info, warn};
 #[derive(Debug, Clone)]
 pub struct ShutdownSignal;
 
-/// Central shutdown controller.  Clone the `ShutdownReceiver` into every
+/// Central shutdown controller. Pass a `ShutdownReceiver` into every
 /// long-running task and poll `receiver.is_shutdown()` or
-/// `receiver.wait().await` to co-operatively stop.
+/// `receiver.wait().await` to co-operatively stop. For tasks spawned later,
+/// call `ShutdownController::subscribe()` to obtain additional receivers.
 pub struct ShutdownController {
     tx: broadcast::Sender<ShutdownSignal>,
 }
