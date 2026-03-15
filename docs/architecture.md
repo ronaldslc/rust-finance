@@ -9,11 +9,13 @@ RustForge Terminal is a low-latency, modular trading architecture built heavily 
 4. **Resiliency over Uptime:** Alpaca WebSockets and TCP EventBus connections feature exponential backoffs (`tokio-retry`) to outlast network drops.
 
 ## Component Flow
-- **Ingestion:** Connects to Finnhub, normalizes ticks, transmits over MPSC to EventBus.
-- **Relay/Bus:** A localized TCP server broadcasting `BotEvent`s to the terminal UI (Ratatui) without coupling them to the Daemon process.
-- **Strategy & AI (Opus 4.6 / Sonnet 4.6 Routing):** ML models act on the normalized stream. PPO Agents and Statistical Arbitrage evaluate. The daemon implements a strictly gated probability router in `ai_pipeline.rs` ensuring high-stakes calls (earnings, FOMC) utilize **Claude Opus 4.6** and routine signals default to faster Sonnet queries.
-- **Risk Layer:** Daily Loss limits, Drawdown monitors, and Kill Switches filter actions.
-- **Tiered Persistence (Phase 7):** Live trading state is persisted instantly into **DragonflyDB** (Redis) ensuring the quant algorithms never wait on disk. An **Async Worker Queue** continuously flushes the historical trades into **PostgreSQL 16** and **TimescaleDB** Hypertables.
+- **Ingestion & Resilience:** Connects to Finnhub/Alpaca, normalizes ticks, transmits over MPSC to EventBus. Guarded by exponential backoff (`reconnect.rs`) and state-machine circuit breakers (`circuit_breaker.rs`).
+- **Relay Router:** Automatically routes transactions via the lowest-latency available JSON-RPC node using Exponential Moving Average (EMA) benchmarking between Helius, Triton, and QuickNode.
+- **Strategy & AI (Opus 4.6 / Sonnet 4.6 Routing):** ML models act on the normalized stream. PPO Agents and Statistical Arbitrage evaluate. The daemon implements a strictly gated probability router in `ai_pipeline.rs` ensuring high-stakes calls (earnings, FOMC) utilize **Claude Opus 4.6**.
+  - Includes **Mirofish Swarm** for 5,000-agent deterministic probability analysis.
+  - Includes server-side **Compaction API** blocks to handle multi-week context retention natively.
+- **Risk Layer:** Advanced Kill Switch evaluating Historical 95% VaR, Maximum Drawdown Halts, and GARCH(1,1) Volatility Surges atomically prior to order submission.
+- **Tiered Persistence:** Live trading state is persisted instantly into **DragonflyDB** (Redis) ensuring the quant algorithms never wait on disk. An **Async Worker Queue** continuously flushes the historical trades into **PostgreSQL 16** and **TimescaleDB** Hypertables using `docker-compose`.
 
 ### Execution Path Latency Specifications
 

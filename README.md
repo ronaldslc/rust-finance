@@ -125,7 +125,8 @@ cargo run -p tui --release
 ## Features
 
 * **Real-time Market Data:** Direct integrations with Finnhub and Alpaca WebSocket streams for sub-millisecond market events.
-* **Low-Latency Order Execution:** Hardware-accelerated Solana RPC interactions via intelligent `relay` routing.
+* **Low-Latency Order Execution:** Hardware-accelerated Solana RPC interactions via intelligent `relay` routing (`rpc_router.rs`) with EMA latency tracking and automatic failovers across Helius, Triton, and QuickNode.
+* **Daemon Resilience:** Production-grade `circuit_breaker.rs` for RPC and API protections, exponential backoff WebSocket `reconnect.rs`, and an OS-level graceful `shutdown.rs` multiplexer.
 * **Quantitative Pricing Analytics (`pricing`):** Bloomberg-grade option pricing frameworks including **Black-Scholes-Merton**, **Hagan SABR Volatility**, **Heston Stochastic Vol**, and **Hull-White Trinomial** trees. 
 * **Fixed Income Modeling:** Implemented the exact BVAL 3-step algorithms and corporate WACC default computations native to institutional desks.
 * **Advanced Risk Engines (`risk`):** Automated VaR checks, dynamic Drawdown halts, and **GARCH(1,1) Volatility forecasting**.
