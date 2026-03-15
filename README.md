@@ -29,7 +29,7 @@
   <img src="https://img.shields.io/badge/Finnhub-000000?style=for-the-badge&logo=graphql&logoColor=white" alt="Finnhub" />
 </div>
 
-A high-performance, low-latency trading terminal and daemon built completely in Rust. Engineered for direct connection to market data streams (Finnhub, Alpaca), real-time AI signal analysis, and Solana-based trade execution.
+A high-performance, ultra low-latency trading terminal and daemon built completely in Rust. Engineered for direct connection to market data streams (Finnhub, Alpaca), real-time AI signal analysis, and Solana-based trade execution.
 
 ![Rust Trading Terminal](https://raw.githubusercontent.com/Ashutosh0x/rust-finance/main/rust%20terminal.png)
 
