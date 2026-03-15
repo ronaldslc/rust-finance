@@ -39,6 +39,13 @@ pub enum BotEvent {
         event_type: String, // "trade", "quote", etc.
         volume: Option<f64>,
     },
+
+    AISignal {
+        symbol: String,
+        action: String,
+        confidence: f64,
+        reason: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

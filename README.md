@@ -58,7 +58,9 @@ graph TD;
         Exec -.-> |Dry Run Mode| Mock(Paper Trading)
         Exec --> |Live Mode| Blockchain(Solana RPC/Jupiter)
         
-        Daemon --> DB[(Persistence - PostgreSQL/SQLite)]
+        Daemon --> Redis[(DragonflyDB Hot-State)]
+        Daemon --> PostgresWorker(Async Persistence Worker)
+        PostgresWorker --> DB[(PostgreSQL + TimescaleDB)]
     end
     
     subgraph "Elite Quant Algorithms"
@@ -134,6 +136,19 @@ cargo run -p tui --release
     * **NeurIPS 2025 Interval Regression:** Advanced multi-layer perceptron training natively on Bid/Ask spreads without lit prints.
 * **Terminal UI (TUI):** A professional-grade, multi-column dashboard rendered directly in your terminal using Ratatui. Features high-res Braille price charts, live options chains (`options_chain.rs`), and live portfolio P&L tracking.
 * **Institutional Execution Protocol:** Active SEBI pre-trade limits, bracket routing, and native FIX 4.4 serialization.
+* **Ultra-Low Latency Tiered Database:**
+    * **Hot-State Memory:** `DragonflyDB` caching live portfolios and AI signal structures completely lock-free.
+    * **Async Persistence Worker:** Decoupled `tokio::mpsc` queue passing disk I/O onto `PostgreSQL 16` and **TimescaleDB** Hypertables supporting millions of inserts globally without locking the main thread.
+
+### Reference Latency Architecture
+
+| System Layer | Technology | Target Latency |
+| :--- | :--- | :--- |
+| **In-Process State** | Rust Memory / Lock-Free Ring Buffers | `~50 ns` |
+| **Shared Hot-State** | DragonflyDB (Multi-threaded Redis) | `~0.2 - 0.5 ms` |
+| **Historical Storage**| PostgreSQL 16 + TimescaleDB Async | `~2 - 5 ms` |
+
+**Critical Trading Path (`memory` → `AI Veto` → `execution`)**: Sub-millisecond (`< 1 ms`) internally.
 
 ## Institutional Quantitative Models (Bloomberg & Jane Street Standards)
 

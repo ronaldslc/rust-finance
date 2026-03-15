@@ -6,6 +6,9 @@ use std::thread;
 use chrono::{Utc, DateTime};
 
 pub mod repositories;
+pub mod db;
+pub mod dragonfly;
+pub mod worker;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TradeRecord {

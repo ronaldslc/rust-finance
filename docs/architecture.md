@@ -13,7 +13,17 @@ RustForge Terminal is a low-latency, modular trading architecture built heavily 
 - **Relay/Bus:** A localized TCP server broadcasting `BotEvent`s to the terminal UI (Ratatui) without coupling them to the Daemon process.
 - **Strategy & AI (Opus 4.6 / Sonnet 4.6 Routing):** ML models act on the normalized stream. PPO Agents and Statistical Arbitrage evaluate. The daemon implements a strictly gated probability router in `ai_pipeline.rs` ensuring high-stakes calls (earnings, FOMC) utilize **Claude Opus 4.6** and routine signals default to faster Sonnet queries.
 - **Risk Layer:** Daily Loss limits, Drawdown monitors, and Kill Switches filter actions.
-- **Persistence:** Appended sequentially to a SQLite `trades` ledger.
+- **Tiered Persistence (Phase 7):** Live trading state is persisted instantly into **DragonflyDB** (Redis) ensuring the quant algorithms never wait on disk. An **Async Worker Queue** continuously flushes the historical trades into **PostgreSQL 16** and **TimescaleDB** Hypertables.
+
+### Execution Path Latency Specifications
+
+| System Layer | Technology | Implementation Crate | Target Latency |
+| :--- | :--- | :--- | :--- |
+| **In-Process State** | Rust Lock-Free Concurrency | `crates/common` | `~50 ns` |
+| **Shared Hot-State** | DragonflyDB via `redis` | `crates/persistence/dragonfly.rs` | `~0.2 - 0.5 ms` |
+| **Historical Storage**| PostgreSQL + TimescaleDB | `crates/persistence/db.rs` | `~2 - 5 ms` |
+
+The entire routing path (`Tick Analysis` → `AI Veto Gate` → `Order Fill`) evaluates natively below `1 ms` internally before Solana RPC propagation.
 
 ## Quantitative Analytics & Pricing (Phase 5)
 RustForge natively integrates Bloomberg-tier financial engineering formulas directly into the `pricing` and `risk` crates, built to execute in microseconds for live terminal display.
