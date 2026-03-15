@@ -162,7 +162,7 @@ Proprietary implementation of the **Hull-White One-Factor** model wrapped in a T
 
 For a deep dive into the system's internal workings, component integration details, and deployment guides, please refer to the inner documentation:
 
-* [Architecture Overview](./docs/ARCHITECTURE.md)
+* [Architecture Overview](./docs/architecture.md)
 * [AI Analyst Integration](./docs/AI_INTEGRATION.md)
 * [WebSocket Normalization Strategies](./docs/WSS_INGESTION.md)
 
