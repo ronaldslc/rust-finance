@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
     let executor = Arc::new(ExecutorService::new(selector.clone(), signer));
 
     // --- PIPELINE STAGES ---
-    let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<common::events::ControlCommand>();
+    let (cmd_tx, mut cmd_rx) = mpsc::channel::<common::events::ControlCommand>(4096);
     
 
     // 2. Persistence
@@ -140,11 +140,7 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         info!("Executor task started");
         loop {
-            // Use try_recv or similar to avoid blocking tokio thread, 
-            // or better, wrap the blocking recv in spawn_blocking
-            let action_res = tokio::task::block_in_place(|| e_rx.recv());
-            
-            if let Ok(action) = action_res {
+            if let Some(action) = e_rx.recv().await {
                 let exec_clone = e_exec.clone();
                 let db_clone = e_db.clone();
                 let bus_clone = e_bus.clone();
@@ -200,7 +196,7 @@ async fn main() -> Result<()> {
             let fh = ingestion::FinnhubWs::new(finnhub_key, vec!["BINANCE:BTCUSDT".into()]);
             tokio::spawn(async move {
                 // Mock channel for Finnhub -> EventBus
-                let (fh_tx, mut fh_rx) = mpsc::unbounded_channel();
+                let (fh_tx, mut fh_rx) = mpsc::channel(10000);
                 let fh_eb = event_bus.clone();
                 tokio::spawn(async move {
                     while let Some(ev) = fh_rx.recv().await {

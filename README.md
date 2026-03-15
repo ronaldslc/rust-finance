@@ -7,6 +7,22 @@
   <img src="https://img.shields.io/badge/Anthropic-FF7F50?style=for-the-badge&logo=Anthropic&logoColor=white" alt="Anthropic" />
   <img src="https://img.shields.io/badge/Ratatui-0A0C0F?style=for-the-badge&logo=Linux&logoColor=white" alt="Ratatui" />
   <img src="https://img.shields.io/badge/WebSocket-010101?style=for-the-badge&logo=socket.io&logoColor=white" alt="WebSocket" />
+  <br />
+  <img src="https://img.shields.io/badge/NASDAQ-0090F7?style=for-the-badge&logo=nasdaq&logoColor=white" alt="NASDAQ" />
+  <img src="https://img.shields.io/badge/NYSE-092140?style=for-the-badge&logo=new-york-stock-exchange&logoColor=white" alt="NYSE" />
+  <img src="https://img.shields.io/badge/LSE-000000?style=for-the-badge&logo=london-stock-exchange&logoColor=white" alt="LSE" />
+  <img src="https://img.shields.io/badge/Euronext-0A2140?style=for-the-badge" alt="Euronext" />
+  <img src="https://img.shields.io/badge/TSX-E0121A?style=for-the-badge" alt="TSX" />
+  <img src="https://img.shields.io/badge/FWB-004B87?style=for-the-badge" alt="FWB" />
+  <img src="https://img.shields.io/badge/TSE-D41A21?style=for-the-badge" alt="TSE" />
+  <img src="https://img.shields.io/badge/SSE-CC0000?style=for-the-badge" alt="SSE" />
+  <img src="https://img.shields.io/badge/HKEX-D0101A?style=for-the-badge" alt="HKEX" />
+  <img src="https://img.shields.io/badge/NSE-004481?style=for-the-badge" alt="NSE" />
+  <img src="https://img.shields.io/badge/BSE-004C8F?style=for-the-badge" alt="BSE" />
+  <img src="https://img.shields.io/badge/ASX-11202C?style=for-the-badge" alt="ASX" />
+  <img src="https://img.shields.io/badge/Binance-FCD535?style=for-the-badge&logo=binance&logoColor=black" alt="Binance" />
+  <img src="https://img.shields.io/badge/Alpaca-FACC15?style=for-the-badge&logo=alpaca&logoColor=black" alt="Alpaca" />
+  <img src="https://img.shields.io/badge/Finnhub-000000?style=for-the-badge&logo=graphql&logoColor=white" alt="Finnhub" />
 </div>
 
 A high-performance, low-latency trading terminal and daemon built completely in Rust. Engineered for direct connection to market data streams (Finnhub, Alpaca), real-time AI signal analysis, and Solana-based trade execution.

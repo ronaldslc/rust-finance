@@ -14,9 +14,11 @@ pub async fn serve(tx: broadcast::Sender<String>) {
         .route("/ws", get(move |ws: WebSocketUpgrade| handle_ws(ws, tx.clone())));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind web dashboard to port 8080");
     tracing::info!("web-dashboard listening on {}", addr);
-    axum::serve(listener, app).await.unwrap();
+    if let Err(e) = axum::serve(listener, app).await {
+        tracing::error!("Web dashboard server crashed: {:?}", e);
+    }
 }
 
 async fn index() -> Html<&'static str> {

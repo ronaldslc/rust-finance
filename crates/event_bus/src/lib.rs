@@ -3,39 +3,57 @@ use tokio::{
     io::{AsyncWriteExt, AsyncBufReadExt, BufReader},
     sync::mpsc,
 };
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use common::events::{BotEvent, ControlCommand};
 use tracing::{info, error};
 
+enum BusCmd {
+    AddClient(mpsc::Sender<BotEvent>),
+    Broadcast(BotEvent),
+}
+
+#[derive(Clone)]
 pub struct EventBus {
-    clients: Arc<Mutex<Vec<mpsc::UnboundedSender<BotEvent>>>>,
+    cmd_tx: mpsc::Sender<BusCmd>,
 }
 
 impl EventBus {
-    pub async fn start(cmd_tx: mpsc::UnboundedSender<ControlCommand>) -> anyhow::Result<Self> {
+    pub async fn start(control_tx: mpsc::Sender<ControlCommand>) -> anyhow::Result<Self> {
         let listener = TcpListener::bind("127.0.0.1:7001").await?;
         info!("Event bus listening on 127.0.0.1:7001");
         
-        let clients = Arc::new(Mutex::new(Vec::new()));
-        let clients_clone = clients.clone();
+        let (bus_tx, mut bus_rx) = mpsc::channel::<BusCmd>(4096);
+        let bus_clone = bus_tx.clone();
+
+        // Single dedicated state manager task for routing events
+        tokio::spawn(async move {
+            let mut clients: Vec<mpsc::Sender<BotEvent>> = Vec::new();
+
+            while let Some(cmd) = bus_rx.recv().await {
+                match cmd {
+                    BusCmd::AddClient(tx) => clients.push(tx),
+                    BusCmd::Broadcast(ev) => {
+                        clients.retain(|tx| tx.try_send(ev.clone()).is_ok());
+                    }
+                }
+            }
+        });
 
         tokio::spawn(async move {
             while let Ok((stream, addr)) = listener.accept().await {
                 info!("TUI connected from: {}", addr);
                 let (reader, mut writer) = tokio::io::split(stream);
-                let (client_tx, mut client_rx) = mpsc::unbounded_channel::<BotEvent>();
+                let (client_tx, mut client_rx) = mpsc::channel::<BotEvent>(1024);
                 
-                clients_clone.lock().await.push(client_tx);
+                let _ = bus_clone.send(BusCmd::AddClient(client_tx)).await;
 
                 // Read task (TUI -> Daemon)
-                let cmd_tx_inner = cmd_tx.clone();
+                let cmd_tx_inner = control_tx.clone();
                 tokio::spawn(async move {
                     let mut lines = BufReader::new(reader).lines();
                     while let Ok(Some(line)) = lines.next_line().await {
                         if let Ok(cmd) = serde_json::from_str::<ControlCommand>(&line) {
                             info!("Received command: {:?}", cmd);
-                            let _ = cmd_tx_inner.send(cmd);
+                            let _ = cmd_tx_inner.try_send(cmd);
                         }
                     }
                 });
@@ -54,16 +72,10 @@ impl EventBus {
             }
         });
 
-        Ok(Self { clients })
+        Ok(Self { cmd_tx: bus_tx })
     }
 
     pub fn broadcast(&self, event: BotEvent) {
-        let clients = self.clients.clone();
-        tokio::spawn(async move {
-            let mut clients_lock = clients.lock().await;
-            clients_lock.retain(|tx| {
-                tx.send(event.clone()).is_ok()
-            });
-        });
+        let _ = self.cmd_tx.try_send(BusCmd::Broadcast(event));
     }
 }

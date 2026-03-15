@@ -27,7 +27,7 @@ pub fn spawn_writer(db_path: &Path) -> anyhow::Result<Sender<PersistCommand>> {
     let db_path = db_path.to_owned();
 
     thread::Builder::new().name("db-writer".into()).spawn(move || {
-        let conn = Connection::open(&db_path).expect("open sqlite");
+        let conn = Connection::open(&db_path).expect("Critical: Failed to open persistence SQLite database");
         conn.execute_batch(
             r#"
             PRAGMA journal_mode = WAL;
@@ -44,7 +44,7 @@ pub fn spawn_writer(db_path: &Path) -> anyhow::Result<Sender<PersistCommand>> {
             );
             CREATE INDEX IF NOT EXISTS idx_trades_token ON trades(token);
             "#,
-        ).unwrap();
+        ).expect("Critical: Failed to initialize SQLite tables");
 
         while let Ok(cmd) = rx.recv() {
             match cmd {

@@ -13,7 +13,7 @@ pub struct NodeSelector {
 impl NodeSelector {
     pub fn new(nodes: Vec<String>) -> Self {
         Self {
-            client: Client::builder().timeout(Duration::from_millis(600)).build().unwrap(),
+            client: Client::builder().timeout(Duration::from_millis(600)).build().unwrap_or_default(),
             candidates: Arc::new(RwLock::new(nodes)),
             best: Arc::new(RwLock::new(None)),
         }
@@ -57,7 +57,7 @@ impl NodeSelector {
         if let Some((best, _)) = latencies.first() {
             let mut guard = self.best.write().await;
             *guard = Some(best.clone());
-            tracing::info!("node-selector picked best node: {} ({}ms)", best, latencies.first().unwrap().1);
+            tracing::info!("node-selector picked best node: {} ({}ms)", best, latencies.first().map(|x| x.1).unwrap_or(0));
         } else {
             tracing::warn!("node-selector: no healthy nodes");
         }

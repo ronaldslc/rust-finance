@@ -7,6 +7,20 @@ use tokio::net::TcpStream;
 use url::Url;
 use tracing::{info, error};
 
+#[derive(serde::Deserialize)]
+struct FinnhubTradeMsg {
+    r#type: String,
+    data: Option<Vec<Trade>>,
+}
+
+#[derive(serde::Deserialize)]
+struct Trade {
+    s: String,
+    p: f64,
+    v: Option<f64>,
+    t: i64,
+}
+
 pub struct FinnhubWs {
     api_key: String,
     symbols: Vec<String>,
@@ -38,24 +52,17 @@ impl FinnhubWs {
                 Ok(tokio_tungstenite::tungstenite::Message::Text(text)) => {
                     // Send directly to normalizer or parse it
                     // Mock normalizer action here for brevity
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                        if json["type"] == "trade" {
-                            if let Some(arr) = json["data"].as_array() {
-                                for item in arr {
-                                    let sym = item["s"].as_str().unwrap_or("UNKNOWN").to_string();
-                                    let price = item["p"].as_f64().unwrap_or(0.0);
-                                    let vol = item["v"].as_f64();
-                                    let ts = item["t"].as_i64().unwrap_or(0);
-                                    
-                                    let ev = BotEvent::MarketEvent {
-                                        symbol: sym,
-                                        price,
-                                        timestamp: ts,
-                                        event_type: "trade".to_string(),
-                                        volume: vol,
-                                    };
-                                    let _ = tx.send(ev);
-                                }
+                    if let Ok(msg) = serde_json::from_str::<FinnhubTradeMsg>(&text) {
+                        if msg.r#type == "trade" {
+                            for t in msg.data.unwrap_or_default() {
+                                let ev = BotEvent::MarketEvent {
+                                    symbol: t.s,
+                                    price: t.p,
+                                    timestamp: t.t,
+                                    event_type: "trade".to_string(),
+                                    volume: t.v,
+                                };
+                                let _ = tx.send(ev);
                             }
                         }
                     }
