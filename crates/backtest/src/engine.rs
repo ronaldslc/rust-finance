@@ -183,7 +183,16 @@ impl BacktestEngine {
         let pos_value: f64 = self
             .positions
             .iter()
-            .map(|(sym, qty)| if sym == &bar.symbol { qty * bar.close } else { 0.0 })
+            .map(|(sym, qty)| {
+                if sym == &bar.symbol {
+                    qty * bar.close
+                } else {
+                    // Use last known price from cost_basis as fallback for other symbols.
+                    // In a real multi-symbol backtest you'd feed multiple bars per timestep.
+                    let last_price = self.cost_basis.get(sym).copied().unwrap_or(0.0);
+                    qty * last_price
+                }
+            })
             .sum();
         self.cash + pos_value
     }

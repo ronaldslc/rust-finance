@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { workspace = true, features = ["net", "io-util", "sync", "time"] }
-tracing = { workspace = true }
-chrono = { workspace = true }
+tokio = { version = "1", features = ["net", "io-util", "sync", "time"] }
+tracing = "0.1"
+chrono = "0.4"
+thiserror = "1.0"

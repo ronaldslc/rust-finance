@@ -153,9 +153,11 @@ impl SebiCompliance {
         }
 
         // ── 2. MIS squareoff time check ─────────────────────────────────────
-        // IST = UTC + 5:30
-        let ist_hour = (now.hour() + 5) % 24;
-        let ist_minute = (now.minute() + 30) % 60;
+        // IST = UTC + 5:30 — use chrono FixedOffset to avoid carry bugs
+        let ist_offset = chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
+        let ist_now = now.with_timezone(&ist_offset);
+        let ist_hour = ist_now.hour();
+        let ist_minute = ist_now.minute();
         if matches!(variety, OrderVariety::Mis | OrderVariety::Bo { .. } | OrderVariety::Co { .. }) {
             if ist_hour > self.cfg.squareoff_time_hour
                 || (ist_hour == self.cfg.squareoff_time_hour

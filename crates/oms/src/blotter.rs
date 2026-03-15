@@ -111,62 +111,61 @@ impl OrderBlotter {
             price_est * quantity
         };
 
-        {
-            let state = self.state.read().await;
+        // SINGLE write lock — prevents TOCTOU race between compliance check and insert
+        let mut state = self.state.write().await;
 
-            // Dedup check
-            if state.client_id_index.contains_key(&client_order_id) {
-                return Err(ComplianceError::DuplicateOrderId { id: client_order_id });
-            }
-
-            // Quantity check
-            if quantity > self.limits.max_order_qty {
-                return Err(ComplianceError::QuantityExceeded {
-                    qty: quantity,
-                    max: self.limits.max_order_qty,
-                });
-            }
-
-            // Notional check
-            if notional > self.limits.max_order_notional {
-                return Err(ComplianceError::NotionalExceeded {
-                    notional,
-                    max: self.limits.max_order_notional,
-                });
-            }
-
-            // Open orders check
-            let open_count = state
-                .orders
-                .values()
-                .filter(|o| o.status.is_active())
-                .count();
-            if open_count >= self.limits.max_open_orders {
-                return Err(ComplianceError::TooManyOpenOrders {
-                    count: open_count,
-                    max: self.limits.max_open_orders,
-                });
-            }
-
-            // Symbol exposure check
-            let current_exposure = state.symbol_exposure.get(&symbol).copied().unwrap_or(0.0);
-            if current_exposure + notional > self.limits.max_symbol_exposure {
-                return Err(ComplianceError::ExposureExceeded {
-                    exposure: current_exposure + notional,
-                    limit: self.limits.max_symbol_exposure,
-                });
-            }
-
-            // Daily turnover check
-            if state.daily_turnover + notional > self.limits.daily_turnover_cap {
-                return Err(ComplianceError::DailyCapBreached {
-                    cap: self.limits.daily_turnover_cap,
-                });
-            }
+        // Dedup check
+        if state.client_id_index.contains_key(&client_order_id) {
+            return Err(ComplianceError::DuplicateOrderId { id: client_order_id });
         }
 
-        // All checks passed — record the order
-        let mut order = Order::new(
+        // Quantity check
+        if quantity > self.limits.max_order_qty {
+            return Err(ComplianceError::QuantityExceeded {
+                qty: quantity,
+                max: self.limits.max_order_qty,
+            });
+        }
+
+        // Notional check
+        if notional > self.limits.max_order_notional {
+            return Err(ComplianceError::NotionalExceeded {
+                notional,
+                max: self.limits.max_order_notional,
+            });
+        }
+
+        // Open orders check
+        let open_count = state
+            .orders
+            .values()
+            .filter(|o| o.status.is_active())
+            .count();
+        if open_count >= self.limits.max_open_orders {
+            return Err(ComplianceError::TooManyOpenOrders {
+                count: open_count,
+                max: self.limits.max_open_orders,
+            });
+        }
+
+        // Symbol exposure check
+        let current_exposure = state.symbol_exposure.get(&symbol).copied().unwrap_or(0.0);
+        if current_exposure + notional > self.limits.max_symbol_exposure {
+            return Err(ComplianceError::ExposureExceeded {
+                exposure: current_exposure + notional,
+                limit: self.limits.max_symbol_exposure,
+            });
+        }
+
+        // Daily turnover check
+        if state.daily_turnover + notional > self.limits.daily_turnover_cap {
+            return Err(ComplianceError::DailyCapBreached {
+                cap: self.limits.daily_turnover_cap,
+            });
+        }
+
+        // All checks passed — record the order (still under the same write lock)
+        let order = Order::new(
             client_order_id.clone(),
             symbol.clone(),
             side,
@@ -176,7 +175,6 @@ impl OrderBlotter {
         );
         let order_id = order.id;
 
-        let mut state = self.state.write().await;
         state.client_id_index.insert(client_order_id, order_id);
         *state.symbol_exposure.entry(symbol).or_insert(0.0) += notional;
         state.orders.insert(order_id, order);

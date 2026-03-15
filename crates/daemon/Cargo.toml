@@ -15,8 +15,9 @@ signer = { path = "../signer" }
 event_bus = { path = "../event_bus" }
 relay = { path = "../relay" }
 persistence = { path = "../persistence" }
-web-dashboard = { path = "../web-dashboard" }
 ai = { path = "../ai" }
+oms = { path = "../oms" }
+metrics_lib = { path = "../metrics", package = "metrics_lib" }
 chrono = "0.4"
 rand = "0.8"
 

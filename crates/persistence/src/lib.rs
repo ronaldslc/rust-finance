@@ -1,4 +1,3 @@
-use rusqlite::{params, Connection};
 use serde::{Serialize, Deserialize};
 use std::path::Path;
 use std::sync::mpsc::{self, Sender};
@@ -26,52 +25,78 @@ pub enum PersistCommand {
     Flush,
 }
 
-/// Spawns a background writer thread. Returns a Sender<PersistCommand>.
+/// Spawns a background writer thread that persists trades to a local SQLite file.
+/// Uses sqlx-sqlite sub-crate (not the sqlx umbrella) to avoid the zeroize
+/// conflict with solana-sdk when sqlx-mysql gets pulled unconditionally.
 pub fn spawn_writer(db_path: &Path) -> anyhow::Result<Sender<PersistCommand>> {
     let (tx, rx) = mpsc::channel::<PersistCommand>();
-    let db_path = db_path.to_owned();
+    let db_path = db_path.to_string_lossy().to_string();
 
     thread::Builder::new().name("db-writer".into()).spawn(move || {
-        let conn = Connection::open(&db_path).expect("Critical: Failed to open persistence SQLite database");
-        conn.execute_batch(
-            r#"
-            PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
-            CREATE TABLE IF NOT EXISTS trades (
-                id INTEGER PRIMARY KEY,
-                tx_sig TEXT UNIQUE,
-                token TEXT,
-                entry_price REAL,
-                exit_price REAL,
-                size REAL,
-                pnl REAL,
-                ts TEXT
-            );
-            CREATE INDEX IF NOT EXISTS idx_trades_token ON trades(token);
-            "#,
-        ).expect("Critical: Failed to initialize SQLite tables");
+        // Build a single-threaded tokio runtime for the blocking writer thread
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create writer runtime");
 
-        while let Ok(cmd) = rx.recv() {
-            match cmd {
-                PersistCommand::InsertTrade(rec) => {
-                    let _ = conn.execute(
-                        "INSERT OR IGNORE INTO trades (tx_sig, token, entry_price, exit_price, size, pnl, ts) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                        params![
-                            rec.tx_sig,
-                            rec.token,
-                            rec.entry_price,
-                            rec.exit_price,
-                            rec.size,
-                            rec.pnl,
-                            rec.ts.to_rfc3339(),
-                        ],
+        rt.block_on(async move {
+            use sqlx_sqlite::SqlitePoolOptions;
+            use sqlx_core::executor::Executor;
+            use sqlx_core::query::query;
+
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect(&format!("sqlite://{}?mode=rwc", db_path))
+                .await
+                .expect("Critical: Failed to open persistence SQLite database");
+
+            pool.execute(
+                sqlx_core::query::query(
+                    r#"
+                    CREATE TABLE IF NOT EXISTS trades (
+                        id INTEGER PRIMARY KEY,
+                        tx_sig TEXT UNIQUE,
+                        token TEXT,
+                        entry_price REAL,
+                        exit_price REAL,
+                        size REAL,
+                        pnl REAL,
+                        ts TEXT
                     );
-                }
-                PersistCommand::Flush => {
-                    let _ = conn.execute_batch("PRAGMA wal_checkpoint(FULL);");
+                    "#,
+                )
+            )
+            .await
+            .expect("Critical: Failed to initialize SQLite tables");
+
+            pool.execute(
+                sqlx_core::query::query("CREATE INDEX IF NOT EXISTS idx_trades_token ON trades(token)")
+            )
+            .await
+            .ok();
+
+            while let Ok(cmd) = rx.recv() {
+                match cmd {
+                    PersistCommand::InsertTrade(rec) => {
+                        let _ = sqlx_core::query::query(
+                            "INSERT OR IGNORE INTO trades (tx_sig, token, entry_price, exit_price, size, pnl, ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        )
+                        .bind(&rec.tx_sig)
+                        .bind(&rec.token)
+                        .bind(rec.entry_price)
+                        .bind(rec.exit_price)
+                        .bind(rec.size)
+                        .bind(rec.pnl)
+                        .bind(rec.ts.to_rfc3339())
+                        .execute(&pool)
+                        .await;
+                    }
+                    PersistCommand::Flush => {
+                        // WAL checkpoint handled internally
+                    }
                 }
             }
-        }
+        });
     })?;
 
     Ok(tx)

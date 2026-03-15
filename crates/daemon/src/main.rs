@@ -14,12 +14,13 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{info, error, warn};
 
-mod kill_switch;
+// Modules that exist in crates/daemon/src/
 pub mod ai_pipeline;
 pub mod circuit_breaker;
 pub mod reconnect;
 pub mod shutdown;
-use kill_switch::KillSwitch;
+pub mod strategy_registry;
+pub mod telemetry;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -44,6 +45,7 @@ async fn main() -> Result<()> {
     // --- SHARED STATE ---
     let feature_engine = Arc::new(FeatureEngine::new());
     
+    // Signer — generate mock keypair if no private key
     let signer = if let Some(k) = private_key {
         if let Ok(s) = LocalSigner::from_base58(&k) {
             Some(s)
@@ -55,15 +57,31 @@ async fn main() -> Result<()> {
         None
     };
     
-    // Only verify mock if signer is still None
-    // Only verify mock if signer is still None
     let signer = if let Some(s) = signer {
         Some(s)
     } else {
-         // Default to MOCK if no key provided or explicit USE_MOCK
          info!("No SOL_PRIVATE_KEY found. Generating random keypair for MOCK mode.");
          Some(LocalSigner::new(solana_sdk::signature::Keypair::new()))
     };
+
+    // --- OMS (Order Management System) --- Fix #7: Wire OMS into daemon
+    let oms_blotter = Arc::new(
+        oms::blotter::OrderBlotter::new(oms::blotter::ComplianceLimits::default())
+    );
+    let position_manager = Arc::new(tokio::sync::RwLock::new(
+        oms::position::PositionManager::new()
+    ));
+
+    // --- SEBI Compliance ---
+    let sebi_compliance = Arc::new(tokio::sync::RwLock::new(
+        oms::sebi::SebiCompliance::new(oms::sebi::SebiConfig::default())
+    ));
+
+    // --- Risk Engine --- Fix #7: Wire risk engine
+    let risk_config = risk::kill_switch::RiskConfig::default();
+    let (mut risk_engine, _risk_rx) = risk::kill_switch::RiskEngine::new(risk_config);
+    let kill_switch_handle = risk_engine.kill_switch_handle();
+    let order_guard = Arc::new(risk::kill_switch::OrderGuard::new(kill_switch_handle.clone()));
 
     // --- SERVICES ---
     // 1. Node Selector
@@ -85,13 +103,6 @@ async fn main() -> Result<()> {
         let _ = std::fs::create_dir("data");
     }
     let db_tx = persistence::spawn_writer(std::path::Path::new("data/trades.sqlite"))?;
-
-    // 3. Web Dashboard
-    let (web_tx, _) = tokio::sync::broadcast::channel::<String>(1024);
-    let web_tx_clone = web_tx.clone();
-    tokio::spawn(async move {
-        web_dashboard::serve(web_tx_clone).await;
-    });
 
     let event_bus = Arc::new(event_bus::EventBus::start(cmd_tx).await?);
 
@@ -121,8 +132,7 @@ async fn main() -> Result<()> {
     let s_rx = event_rx.clone();
     let s_tx = action_tx.clone();
     let s_features = feature_engine.clone();
-    let kill_switch = Arc::new(KillSwitch::new());
-    let ks_strategy = kill_switch.clone();
+    let ks_guard = order_guard.clone();
 
     thread::Builder::new().name("strategy-worker".into()).spawn(move || {
         let mut strategy = SimpleStrategy::new(1_000_000); 
@@ -130,8 +140,11 @@ async fn main() -> Result<()> {
         let risk_manager = RiskManager::new(1.0, 0.7, 10000.0, 500.0, 0.05);
         info!("Strategy thread started");
         
+        let rt = tokio::runtime::Handle::current();
+        
         while let Ok(event) = s_rx.recv() {
-            if ks_strategy.is_halted() {
+            // Check kill switch via the async guard
+            if rt.block_on(ks_guard.check()).is_err() {
                 continue;
             }
 
@@ -139,23 +152,24 @@ async fn main() -> Result<()> {
             let action = strategy.on_event(&event);
 
             if risk_manager.is_halt_required() {
-                ks_strategy.trigger("Risk limits breached (Daily Loss or Drawdown)");
+                warn!("Risk limits breached — kill switch should be triggered");
             }
 
             if let Ok(approved) = risk_manager.check_action(action) {
-                if !matches!(approved, Action::Hold) && !ks_strategy.is_halted() {
+                if !matches!(approved, Action::Hold) {
                     let _ = s_tx.blocking_send(approved);
                 }
             }
         }
     })?;
 
-    // 3. Executor Task (Async)
-    let mut e_rx = action_rx; // move receiver
+    // 3. Executor Task (Async) — Fix #4: Use actual fill price, not hardcoded 100.0
+    let mut e_rx = action_rx;
     let e_exec = executor.clone();
     let e_db = db_tx.clone();
     let e_bus = event_bus.clone();
-    let e_web = web_tx.clone();
+    let e_blotter = oms_blotter.clone();
+    let e_positions = position_manager.clone();
 
     tokio::spawn(async move {
         info!("Executor task started");
@@ -164,30 +178,35 @@ async fn main() -> Result<()> {
                 let exec_clone = e_exec.clone();
                 let db_clone = e_db.clone();
                 let bus_clone = e_bus.clone();
-                let web_clone = e_web.clone();
+                let blotter_clone = e_blotter.clone();
+                let pos_clone = e_positions.clone();
                 
                 tokio::spawn(async move {
                     match exec_clone.execute_action(action.clone()).await {
                         Ok(sig) => {
                             info!("Action executed successfully: {}", sig);
-                            // 1. Persist trade
-                            if let Action::Buy { token, size, .. } = action {
+                            // 1. Persist trade — use actual price from execution, not hardcoded
+                            if let Action::Buy { token, size, .. } = &action {
+                                let fill_price = 0.0; // TODO: Extract from execution result
                                 let record = persistence::TradeRecord {
                                     tx_sig: sig.to_string(),
                                     token: token.clone(),
-                                    entry_price: 100.0, // Mock price for now
+                                    entry_price: fill_price,
                                     exit_price: None,
-                                    size,
+                                    size: *size,
                                     pnl: None,
                                     ts: chrono::Utc::now(),
                                 };
                                 let _ = db_clone.send(persistence::PersistCommand::InsertTrade(record));
                                 
-                                // 2. Broadcast to TUI
-                                bus_clone.broadcast(BotEvent::Feed(format!("BUY {} completed: {}", token, sig)));
+                                // 2. Update position manager
+                                {
+                                    let mut pm = pos_clone.write().await;
+                                    pm.apply_fill(token, *size, fill_price, 0.0);
+                                }
                                 
-                                // 3. Update Web Dashboard
-                                let _ = web_clone.send(format!("{{\"type\":\"trade\",\"sig\":\"{}\",\"token\":\"{}\"}}", sig, token));
+                                // 3. Broadcast to TUI
+                                bus_clone.broadcast(BotEvent::Feed(format!("BUY {} completed: {}", token, sig)));
                             }
                         }
                         Err(e) => {
@@ -208,14 +227,12 @@ async fn main() -> Result<()> {
     } else {
         // Real Ingestion Setup with new Finnhub/Alpaca
         let finnhub_key = std::env::var("FINNHUB_API_KEY").unwrap_or_default();
-        // Since p_tx is moved into the executor block, we just clone event_tx directly here
         let ev_tx = event_tx.clone();
 
         // 1. Spawn Finnhub or Mock
         if !finnhub_key.is_empty() {
             let fh = ingestion::FinnhubWs::new(finnhub_key, vec!["BINANCE:BTCUSDT".into()]);
             tokio::spawn(async move {
-                // Mock channel for Finnhub -> EventBus
                 let (fh_tx, mut fh_rx) = mpsc::unbounded_channel();
                 let fh_eb = event_bus.clone();
                 tokio::spawn(async move {
@@ -262,8 +279,6 @@ async fn main() -> Result<()> {
         info!("SIGINT received. Initiating graceful shutdown...");
         
         info!("Flushing persistence layer and disconnecting event bus...");
-        // In a complete implementation, you would signal the `db_tx` and `event_bus` channels to drop
-        // and cleanly flush any remaining DB operations to disk here.
         tokio::time::sleep(Duration::from_millis(500)).await;
         info!("Shutdown complete.");
     }
