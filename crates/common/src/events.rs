@@ -46,6 +46,21 @@ pub enum BotEvent {
         confidence: f64,
         reason: String,
     },
+
+    QuoteEvent {
+        symbol: String,
+        bid_price: f64,
+        bid_size: u64,
+        ask_price: f64,
+        ask_size: u64,
+        timestamp: i64,
+    },
+
+    ExchangeHeartbeat {
+        exchange: String,
+        status: String,
+        latency_ms: f64,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

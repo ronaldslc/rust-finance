@@ -5,4 +5,3 @@ type-complexity-threshold = 250
 enum-variant-name-threshold = 5
 
 # Allow standard doc omissions for internal project until phase 5
-allow-missing-docs = true

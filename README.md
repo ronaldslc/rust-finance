@@ -33,6 +33,7 @@
   <img src="https://img.shields.io/badge/Windows_EXE-Coming_Soon-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows EXE" />
 </div>
 
+## Overview
 A high-performance, ultra low-latency trading terminal and daemon built completely in Rust. Engineered for direct connection to market data streams (Finnhub, Alpaca), real-time AI signal analysis, and Solana-based trade execution.
 
 ![Rust Trading Terminal Badge](rust_terminal_badge.png)
@@ -40,7 +41,22 @@ A high-performance, ultra low-latency trading terminal and daemon built complete
 ![Rust Trading Terminal](https://raw.githubusercontent.com/Ashutosh0x/rust-finance/main/rust%20terminal.png)
 
 ![Helper Utilities](https://raw.githubusercontent.com/Ashutosh0x/rust-finance/main/helper.png)
-## System Architecture
+
+## Table of Contents
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Project Structure](#project-structure)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Components Deep Dive](#components-deep-dive)
+- [Running the System](#running-the-system)
+- [Strategy Development](#strategy-development)
+- [API Reference](#api-reference)
+- [Troubleshooting](#troubleshooting)
+- [License & Disclaimer](#license--disclaimer)
+
+## Architecture
 
 ```mermaid
 graph TD;
@@ -91,7 +107,7 @@ graph TD;
     end
 ```
 
-## Workspace Crates
+## Project Structure
 
 The workspace is organized into discrete, highly decoupled crates:
 
@@ -104,7 +120,7 @@ The workspace is organized into discrete, highly decoupled crates:
 * **`persistence`**: Storage layer designed to record transactional records, system P&L tracking, and order history.
 * **`common`**: Shared models, structs, commands, and `BotEvent` enumerations used across all systems to guarantee strict typing on inter-process communications.
 
-## Configuration & Usage
+## Configuration
 
 The system expects several environment variables to be set for external API integrations:
 
@@ -128,8 +144,7 @@ In a separate terminal, launch the Terminal User Interface:
 cargo run -p tui --release
 ```
 
-## Features
-
+### Features
 * **Real-time Market Data:** Direct integrations with Finnhub and Alpaca WebSocket streams for sub-millisecond market events.
 * **Low-Latency Order Execution:** Hardware-accelerated Solana RPC interactions via intelligent `relay` routing (`rpc_router.rs`) with EMA latency tracking and automatic failovers across Helius, Triton, and QuickNode.
 * **Daemon Resilience:** Production-grade `circuit_breaker.rs` for RPC and API protections, exponential backoff WebSocket `reconnect.rs`, and an OS-level graceful `shutdown.rs` multiplexer.
@@ -160,7 +175,13 @@ cargo run -p tui --release
 
 **Critical Trading Path (`memory` → `AI Veto` → `execution`)**: Sub-millisecond (`< 1 ms`) internally.
 
-## Institutional Quantitative Models (Bloomberg & Jane Street Standards)
+## Quick Start
+1. Ensure you have Rust and Cargo installed (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
+2. Clone the repository: `git clone https://github.com/Ashutosh0x/rust-finance.git`
+3. Configure your API keys (see [Configuration](#configuration)).
+4. Run the daemon and TUI in separate terminal windows (see [Running the System](#running-the-system)).
+
+## Components Deep Dive
 
 RustForge natively implements the top mathematical formulations utilized by elite trading desks and quantitative hedge funds:
 
@@ -184,25 +205,33 @@ A specialized machine learning Neural Network loss function used to price illiqu
 ### 4. Hull-White Trinomial Rate Trees & BVAL
 Proprietary implementation of the **Hull-White One-Factor** model wrapped in a Trinomial Tree algorithm for American interest-rate derivatives, mapping directly against the Bloomberg **BVAL 3-Step** structural bond pricing cascade.
 
-## Detailed Documentation
+## Strategy Development
+Strategies are written in the `strategy` crate by implementing the `PluggableStrategy` asynchronous trait:
+1. Define your strategy struct and state.
+2. Implement `on_market_event()` to process live tick data.
+3. Emit `TradeSignal` objects containing desired positions and dynamic confidences.
+4. Hot-swap the strategy within the `daemon` strategy registry.
 
-For a deep dive into the system's internal workings, component integration details, and deployment guides, please refer to the inner documentation:
+For examples, review `AiGatedMomentum` inside `crates/daemon/src/strategy_registry.rs`.
 
-* [Architecture Overview](./docs/architecture.md)
-* [AI Analyst Integration](./docs/AI_INTEGRATION.md)
-* [WebSocket Normalization Strategies](./docs/WSS_INGESTION.md)
+## API Reference
+**WebSocket Ingestion Ports**: `4310` (Market Data)
+**Axum Promethus Metrics**: `GET /metrics` on port `3000`
+**Tracing Export**: OTLP UDP via port `4318` (See docker-compose.yml for Jaeger configuration)
 
-*(Note: Documentation nodes are actively updated by the engineering team.)*
+### Alpaca Broker API Integration
+ RustForge fully integrates with the Alpaca Paper/Live v2 Trading REST API to dispatch stock and fiat executions transparently from the TUI.
+ 
+ - **`POST /v2/orders`**: Submitted via the `AlpacaBroker::submit_order` async method bridging TUI dialogue events straight to Alpaca. It enforces parameters like  `symbol`, `qty`, `side` (buy/sell), `type` (market/limit), and `time_in_force`.
+ - **`GET /v2/positions`**: Periodically queried by the ingestion pipeline to map live execution statuses into the TUI Open Positions tables.
 
-## Contributing
+## Troubleshooting
+- **Build Errors on `tokio` or `tracing` limits**: Make sure you have the exact toolchain and dependencies listed in the workspace `Cargo.toml`. 
+- **Insufficient SOL Execution errors**: Provide a funded wallet address via `SOL_PRIVATE_KEY` base58 env var. The executor has a hardcoded `0.005 SOL` minimum balance rent safety check.
+- **WebSocket Timeout**: Ensure your Finnhub/Alpaca connection allows your IP or that your API keys are correct. `reconnect.rs` will print warnings on exponential backoff attempts.
 
-We strictly enforce high professional standards for contributions. 
-
-Please take the time to read our detailed **[Contribution Guidelines](CONTRIBUTING.md)** before submitting a pull request. It contains instructions regarding:
-* Local Environment Setup
-* Cargo Testing and Formatting requirements
-* Commit Message Standards
-
-## UI and Visual Constraints
-
-The TUI utilizes `Constraint::Length` and custom Ratatui widget styling to enforce a strict immutable grid layout. Custom hex colors have been applied globally to match a proprietary theme design.
+## License & Disclaimer
+> [!WARNING]  
+> This software is provided for **educational and research purposes only**. The authors are not responsible for any financial losses incurred from running autonomous code on live capital. 
+> 
+> *MIT License (c) 2026 Ashutosh0x*

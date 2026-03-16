@@ -19,7 +19,7 @@ pub struct FillRecord {
     pub fill_price: f64,
     /// Order side: 1.0 for buy, -1.0 for sell
     pub side_sign: f64,
-    pub quantity: u64,
+    pub quantity: f64,
     /// Commission paid in USD
     pub commission_usd: f64,
     /// Timestamp of decision
@@ -58,7 +58,7 @@ pub struct TcaMetrics {
 
 impl TcaMetrics {
     pub fn from_fill(fill: &FillRecord) -> Self {
-        let notional = fill.fill_price * fill.quantity as f64;
+        let notional = fill.fill_price * fill.quantity;
 
         let commission_bps = if notional > 0.0 {
             (fill.commission_usd / notional) * 10_000.0
@@ -162,7 +162,7 @@ impl TcaEngine {
         let avg_comm  = self.metrics.iter().map(|m| m.commission_bps).sum::<f64>() / n;
         let avg_total = self.metrics.iter().map(|m| m.total_cost_bps).sum::<f64>() / n;
         let avg_lat   = self.metrics.iter().map(|m| m.latency_ms as f64).sum::<f64>() / n;
-        let total_not = self.fills.iter().map(|f| f.fill_price * f.quantity as f64).sum::<f64>();
+        let total_not = self.fills.iter().map(|f| f.fill_price * f.quantity).sum::<f64>();
 
         // Per-strategy aggregation
         let mut by_strategy: HashMap<String, (usize, f64, f64)> = HashMap::new();

@@ -9,11 +9,10 @@ serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 tokio = { version = "1", features = ["full", "sync", "macros"] }
-# Use individual sqlx sub-crates to avoid sqlx-mysql pulling rsa/zeroize
-# which conflicts with solana-sdk's curve25519-dalek (zeroize <1.4)
-sqlx-core = { version = "0.7.4", features = ["chrono", "json"] }
+# Use individual sqlx sub-crates to avoid zeroize conflict with solana-sdk
+sqlx-core = { version = "0.7.4", features = ["chrono", "uuid", "migrate"] }
 sqlx-postgres = { version = "0.7.4", features = ["chrono", "json"] }
-sqlx-sqlite = { version = "0.7.4" }
+sqlx-sqlite = { version = "0.7.4", features = ["chrono", "uuid"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 redis = { version = "0.26", features = ["tokio-comp"] }
 tracing = "0.1"

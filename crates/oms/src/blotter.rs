@@ -185,15 +185,16 @@ impl OrderBlotter {
     /// Apply an event to an existing order.
     pub async fn apply_event(&self, order_id: Uuid, event: OrderEvent) -> Result<(), ComplianceError> {
         let mut state = self.state.write().await;
-        let order = state
-            .orders
-            .get_mut(&order_id)
-            .ok_or(ComplianceError::OrderNotFound { id: order_id })?;
 
         // Update daily turnover on fills
         if let OrderEvent::FillReceived { qty, price, .. } = &event {
             state.daily_turnover += qty * price;
         }
+
+        let order = state
+            .orders
+            .get_mut(&order_id)
+            .ok_or(ComplianceError::OrderNotFound { id: order_id })?;
 
         order.apply(event).map_err(|e| ComplianceError::OrderNotFound { id: order_id })
     }

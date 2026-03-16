@@ -99,10 +99,35 @@ pub mod serializer {
         }
     }
     
-    pub struct FixParser;
+    pub struct FixParser {
+        buffer: Vec<u8>
+    }
+    
     impl FixParser {
-        pub fn new() -> Self { Self }
-        pub fn push_bytes(&mut self, _bytes: &[u8]) {}
-        pub fn next_message(&mut self) -> Option<FixMessage> { None }
+        pub fn new() -> Self { Self { buffer: Vec::new() } }
+        pub fn push_bytes(&mut self, bytes: &[u8]) {
+            self.buffer.extend_from_slice(bytes);
+        }
+        pub fn next_message(&mut self) -> Option<FixMessage> {
+            // Very simplified: look for trailing "10=xxx\x01" CheckSum field
+            // Real FIX parsers read "9=length" to slice the message deterministically.
+            let checksum_field = b"10=";
+            
+            if let Some(pos) = self.buffer.windows(3).position(|w| w == checksum_field) {
+                // Find next SOH byte after "10="
+                if let Some(soh_pos) = self.buffer[pos..].iter().position(|&b| b == 1) {
+                    let end_pos = pos + soh_pos + 1;
+                    
+                    // Consume the message bytes
+                    let _msg_bytes = self.buffer.drain(..end_pos).collect::<Vec<u8>>();
+                    
+                    // We return a dummy heartbeat msg for now
+                    let mut msg = FixMessage::new(MsgType::Heartbeat);
+                    msg.set_field(35, "0");
+                    return Some(msg);
+                }
+            }
+            None
+        }
     }
 }

@@ -8,7 +8,9 @@ use futures_util::StreamExt;
 use std::time::Duration;
 
 pub struct AlpacaReconnectClient {
+    #[allow(dead_code)]
     api_key: String,
+    #[allow(dead_code)]
     secret_key: String,
 }
 

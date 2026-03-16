@@ -22,23 +22,71 @@ pub struct ExecutorService {
     selector: Arc<relay::NodeSelector>,
     signer: Option<Arc<LocalSigner>>,
     rpc_client: Arc<RpcClient>,
+    alpaca: Option<ingestion::alpaca_broker::AlpacaBroker>,
 }
 
 impl ExecutorService {
     pub async fn new(selector: Arc<relay::NodeSelector>, signer: Option<LocalSigner>) -> Self {
-        let best_node = selector.get_best().await;
-        let rpc_url = best_node.rpc_url.clone();
+        let rpc_url = selector.get_best().await;
+        
+        let alpaca = if let (Ok(api), Ok(sec)) = (std::env::var("ALPACA_API_KEY"), std::env::var("ALPACA_SECRET_KEY")) {
+            Some(ingestion::alpaca_broker::AlpacaBroker::new(api, sec))
+        } else {
+            None
+        };
+
         Self {
             selector,
             signer: signer.map(Arc::new),
             rpc_client: Arc::new(RpcClient::new(rpc_url)),
+            alpaca,
         }
     }
 
     pub async fn execute_action(&self, action: Action) -> Result<Signature> {
-        let signer = self.signer.as_ref().context("No signer configured for execution")?;
+        let (token, size, confidence) = match &action {
+            Action::Buy { token, size, confidence } => (token.clone(), *size, *confidence),
+            Action::Sell { token, size, confidence } => (token.clone(), *size, *confidence),
+            Action::Hold => return Ok(Signature::default()),
+        };
         
-        // --- 1. PRE-TRADE BALANCE CHECK ---
+        // --- 1. ROUTING DIFFERENTIAL: CRYPTO VS EQUITIES ---
+        let is_crypto = token.starts_with('$') || token.ends_with("USDC") || token.ends_with("SOL");
+        
+        if !is_crypto {
+            info!("Routing Equity/Fiat execution to Alpaca Broker for {}", token);
+            if let Some(alpaca) = &self.alpaca {
+                let side = match action {
+                    Action::Buy { .. } => "buy",
+                    Action::Sell { .. } => "sell",
+                    _ => "",
+                };
+                
+                let req = ingestion::alpaca_broker::AlpacaOrderRequest {
+                    symbol: token.clone(),
+                    qty: size,
+                    side: side.to_string(),
+                    type_: "market".to_string(),
+                    time_in_force: "gtc".to_string(),
+                };
+                
+                match alpaca.submit_order(req).await {
+                    Ok(resp) => {
+                        info!("Alpaca Order Filled: ID {} @ {}", resp.id, resp.status);
+                        // Return dummy signature for non-crypto
+                        return Ok(Signature::new_unique());
+                    }
+                    Err(e) => anyhow::bail!("Alpaca Execution failed: {}", e),
+                }
+            } else {
+                anyhow::bail!("Cannot execute equity trade for {}: Alpaca keys not configured in ENV", token);
+            }
+        }
+
+        // --- 2. CRYPTO ROUTE (SOLANA RPC) ---
+        let signer = self.signer.as_ref().context("No signer configured for crypto execution")?;
+        
+        // --- 2A. PRE-TRADE BALANCE CHECK ---
         let rpc_client = self.rpc_client.clone();
         
         let pubkey = signer.pubkey();
@@ -54,26 +102,19 @@ impl ExecutorService {
             Err(_) => anyhow::bail!("RPC balance check timed out"),
         }
 
-        // --- 2. EXECUTION & SLIPPAGE GUARD ---
+        // --- 2B. EXECUTION & SLIPPAGE GUARD ---
         match action {
             Action::Buy { token, size, confidence } => {
-                info!("Executing BUY for {}: size={}, confidence={}", token, size, confidence);
-                
-                // SLIPPAGE GUARD 
-                // In a production system, we'd query the Jupiter/Orca quote API here to estimate the output.
-                // If expected_output < (expected_out * (1.0 - MAX_SLIPPAGE_BPS / 10000.0)), we abort.
+                info!("Executing Crypto BUY for {}: size={}, confidence={}", token, size, confidence);
                 let max_slippage_bps = 50; // 0.5%
                 info!("Enforcing max slippage limit: {} bps", max_slippage_bps);
-                
                 let instructions = self.build_buy_instructions(&token, size)?;
                 self.send_and_confirm(instructions, signer).await
             }
             Action::Sell { token, size, confidence } => {
-                info!("Executing SELL for {}: size={}, confidence={}", token, size, confidence);
-                
+                info!("Executing Crypto SELL for {}: size={}, confidence={}", token, size, confidence);
                 let max_slippage_bps = 50;
                 info!("Enforcing max slippage limit: {} bps", max_slippage_bps);
-                
                 let instructions = self.build_sell_instructions(&token, size)?;
                 self.send_and_confirm(instructions, signer).await
             }

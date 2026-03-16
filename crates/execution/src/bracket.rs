@@ -22,7 +22,7 @@ pub struct BracketOrder {
 #[derive(Debug, Clone)]
 pub struct BracketLeg {
     pub price: f64,
-    pub quantity: u64,
+    pub quantity: f64,
     /// Set once the leg order is submitted to exchange
     pub order_id: Option<OrderId>,
     pub status: LegStatus,

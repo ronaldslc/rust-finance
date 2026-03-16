@@ -32,7 +32,7 @@ pub struct Order {
     pub symbol: String,
     pub side: OrderSide,
     pub order_type: OrderType,
-    pub quantity: u64,
+    pub quantity: f64,
     pub limit_price: Option<f64>,
     pub stop_price: Option<f64>,
     pub status: OrderStatus,

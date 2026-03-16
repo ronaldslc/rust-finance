@@ -56,7 +56,7 @@ pub enum ChangeDirection { Up, Down, Either }
 pub struct OrderTemplate {
     pub symbol: String,
     pub side: OrderSide,
-    pub quantity: u64,
+    pub quantity: f64,
     pub order_type: OrderType,
     pub limit_price: Option<f64>,
 }

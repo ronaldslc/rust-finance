@@ -14,3 +14,5 @@ pub mod alpaca;
 pub use finnhub_ws::FinnhubWs;
 pub use alpaca_ws::AlpacaWs;
 pub use normalizer::Normalizer;
+pub mod alpaca_broker;
+pub use alpaca_broker::{AlpacaBroker, AlpacaOrderRequest};

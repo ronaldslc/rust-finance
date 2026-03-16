@@ -182,7 +182,7 @@ impl FixSession {
             writer.write_all(&resend.encode()).await.map_err(|e| FixError::Io(e))?;
             return Ok(());
         } else if incoming_seq < expected_seq {
-            let msg_type = msg.get_field(35).unwrap_or("");
+            let msg_type = msg.get_field(35).map(|s| s.as_str()).unwrap_or("");
             if msg_type != "4" { // 4 = SequenceReset
                 error!("FIX Fatal: Incoming seq num {} lower than expected {}", incoming_seq, expected_seq);
                 // In production, send Logout + disconnect here

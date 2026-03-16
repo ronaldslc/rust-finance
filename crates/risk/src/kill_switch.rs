@@ -76,10 +76,10 @@ impl Default for RiskConfig {
 // ── Kill Switch State ────────────────────────────────────────────────────────
 
 #[derive(Debug)]
-struct KillSwitchState {
-    active: AtomicBool,
-    reason: Option<String>,
-    activated_at: Option<Instant>,
+pub struct KillSwitchState {
+    pub active: AtomicBool,
+    pub reason: Option<String>,
+    pub activated_at: Option<Instant>,
 }
 
 // ── GARCH(1,1) Tracker ───────────────────────────────────────────────────────

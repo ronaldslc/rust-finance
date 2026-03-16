@@ -36,7 +36,7 @@ pub fn init(service_name: &'static str, otlp_endpoint: Option<&str>) {
             .install_batch(opentelemetry_sdk::runtime::Tokio)
             .expect("OTLP pipeline");
 
-        Some(provider.tracer(service_name))
+        Some(provider)
     } else {
         None
     };

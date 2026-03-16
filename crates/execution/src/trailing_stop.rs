@@ -16,7 +16,7 @@ pub struct TrailingStop {
     pub current_stop_price: f64,
     /// Best price seen since position opened (highest for long, lowest for short)
     pub best_price: f64,
-    pub quantity: u64,
+    pub quantity: f64,
     pub triggered: bool,
     pub order_id: Option<OrderId>,
 }

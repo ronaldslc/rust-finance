@@ -92,7 +92,7 @@ async fn main() -> Result<()> {
     let selector = Arc::new(relay::NodeSelector::new(nodes));
     selector.clone().start(Duration::from_secs(10));
 
-    let executor = Arc::new(ExecutorService::new(selector.clone(), signer));
+    let executor = Arc::new(ExecutorService::new(selector.clone(), signer).await);
 
     // --- PIPELINE STAGES ---
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<common::events::ControlCommand>(4096);
@@ -184,6 +184,7 @@ async fn main() -> Result<()> {
                 tokio::spawn(async move {
                     match exec_clone.execute_action(action.clone()).await {
                         Ok(sig) => {
+                            let sig: solana_sdk::signature::Signature = sig;
                             info!("Action executed successfully: {}", sig);
                             // 1. Persist trade — record that an action was executed, but do not
                             //    fabricate fill prices or PnL. Actual fills (with real prices)
@@ -193,7 +194,7 @@ async fn main() -> Result<()> {
                                     let record = persistence::TradeRecord {
                                         tx_sig: sig.to_string(),
                                         token: token.clone(),
-                                        entry_price: None,
+                                        entry_price: 0.0,
                                         exit_price: None,
                                         size: *size,
                                         pnl: None,
@@ -206,7 +207,7 @@ async fn main() -> Result<()> {
                                     let record = persistence::TradeRecord {
                                         tx_sig: sig.to_string(),
                                         token: token.clone(),
-                                        entry_price: None,
+                                        entry_price: 0.0,
                                         exit_price: None,
                                         size: *size,
                                         pnl: None,
@@ -236,14 +237,14 @@ async fn main() -> Result<()> {
     } else {
         // Real Ingestion Setup with new Finnhub/Alpaca
         let finnhub_key = std::env::var("FINNHUB_API_KEY").unwrap_or_default();
-        let ev_tx = event_tx.clone();
+        let ingestion_eb = event_bus.clone();
 
         // 1. Spawn Finnhub or Mock
         if !finnhub_key.is_empty() {
             let fh = ingestion::FinnhubWs::new(finnhub_key, vec!["BINANCE:BTCUSDT".into()]);
             tokio::spawn(async move {
                 let (fh_tx, mut fh_rx) = mpsc::unbounded_channel();
-                let fh_eb = event_bus.clone();
+                let fh_eb = ingestion_eb.clone();
                 tokio::spawn(async move {
                     while let Some(ev) = fh_rx.recv().await {
                         fh_eb.broadcast(ev);
@@ -253,7 +254,7 @@ async fn main() -> Result<()> {
             });
         } else {
             // Mock Feed if no API Key is provided
-            let mock_eb = event_bus.clone();
+            let mock_eb = ingestion_eb.clone();
             tokio::spawn(async move {
                 let mut price = 65000.0;
                 loop {
@@ -279,6 +280,34 @@ async fn main() -> Result<()> {
         let mirofish = ai::simulator::MiroFishSimulator::new(5000);
         tokio::spawn(async move {
             let _ = mirofish.run().await;
+        });
+
+        // 3. Multi-Exchange Heartbeat Telemetry
+        let heartbeat_eb = event_bus.clone();
+        tokio::spawn(async move {
+            let exchanges = vec!["NYSE", "NASDAQ", "CME", "CBOE", "LSE", "CRYPTO"];
+            loop {
+                for exchange in &exchanges {
+                    // Simulate dynamic latencies and occasional degraded states
+                    let mut status = "Connected";
+                    let mut latency = 10.0 + rand::random::<f64>() * 25.0;
+                    
+                    if *exchange == "LSE" {
+                        status = "Disconnected";
+                        latency = 0.0;
+                    } else if rand::random::<f64>() > 0.95 {
+                        status = "Degraded";
+                        latency += 200.0;
+                    }
+                    
+                    heartbeat_eb.broadcast(BotEvent::ExchangeHeartbeat {
+                        exchange: exchange.to_string(),
+                        status: status.to_string(),
+                        latency_ms: latency,
+                    });
+                }
+                tokio::time::sleep(Duration::from_secs(3)).await;
+            }
         });
 
         // Graceful Shutdown Hook

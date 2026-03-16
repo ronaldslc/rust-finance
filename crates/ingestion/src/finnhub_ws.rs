@@ -3,6 +3,7 @@ use common::events::BotEvent;
 use tokio::sync::mpsc;
 use futures_util::StreamExt;
 use tokio_tungstenite::connect_async;
+#[allow(unused_imports)]
 use tokio::net::TcpStream;
 use url::Url;
 use std::time::Duration;

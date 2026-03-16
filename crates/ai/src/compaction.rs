@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use tracing::{debug, info, warn};
+use thiserror::Error;
 
 const ANTHROPIC_API_BASE: &str = "https://api.anthropic.com/v1";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -72,7 +73,7 @@ struct UsageStats {
 }
 
 /// Errors from the Compaction-aware client.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum CompactionError {
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),

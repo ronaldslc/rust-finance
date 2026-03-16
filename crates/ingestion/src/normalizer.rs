@@ -1,4 +1,5 @@
 use common::events::BotEvent;
+use serde_json::Value;
 
 pub struct Normalizer;
 
@@ -7,7 +8,45 @@ impl Normalizer {
         Self
     }
     
-    // In a real system the individual WS modules could yield raw Strings 
-    // and normalizer turns them into BotEvent::MarketEvent.
-    // We embedded basic parsing in finnhub_ws.rs for brevity.
+    /// Parses raw JSON string messages into BotEvent
+    pub fn normalize(raw: &str) -> Option<BotEvent> {
+        let v: Value = serde_json::from_str(raw).ok()?;
+
+        // If it's a Finnhub trade event
+        if v["type"] == "trade" {
+            if let Some(r_array) = v["data"].as_array() {
+                if let Some(data) = r_array.first() {
+                    let symbol = data["s"].as_str()?.to_string();
+                    let price = data["p"].as_f64()?;
+                    let timestamp = data["t"].as_i64()?;
+                    let volume = data["v"].as_f64();
+                    
+                    return Some(BotEvent::MarketEvent {
+                        symbol,
+                        price,
+                        timestamp,
+                        event_type: "trade".to_string(),
+                        volume,
+                    });
+                }
+            }
+        }
+        
+        // Simple generic format for other sources
+        if let (Some(s), Some(p), Some(t)) = (
+            v["symbol"].as_str(),
+            v["price"].as_f64(),
+            v["timestamp"].as_i64(),
+        ) {
+            return Some(BotEvent::MarketEvent {
+                symbol: s.to_string(),
+                price: p,
+                timestamp: t,
+                event_type: v["event_type"].as_str().unwrap_or("trade").to_string(),
+                volume: v["volume"].as_f64(),
+            });
+        }
+        
+        None
+    }
 }

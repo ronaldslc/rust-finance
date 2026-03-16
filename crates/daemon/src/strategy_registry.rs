@@ -59,7 +59,7 @@ pub trait PluggableStrategy: Send + Sync {
     async fn on_market_event(&mut self, ctx: &MarketContext) -> Option<TradeSignal>;
 
     /// Called when a fill is received for a signal emitted by this strategy.
-    async fn on_fill(&mut self, symbol: &str, qty: f64, price: f64) {}
+    async fn on_fill(&mut self, _symbol: &str, _qty: f64, _price: f64) {}
 
     /// Called on periodic heartbeat (every N seconds) — useful for time-based exits.
     async fn on_heartbeat(&mut self) -> Vec<TradeSignal> {
