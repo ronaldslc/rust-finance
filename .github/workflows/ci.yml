@@ -31,3 +31,5 @@ jobs:
         run: cargo build --workspace --release
       - name: Run tests
         run: cargo test --workspace
+      - name: Generate Code Coverage
+        run: cargo install cargo-tarpaulin && cargo tarpaulin --workspace --timeout 120 --out html --output-dir coverage
