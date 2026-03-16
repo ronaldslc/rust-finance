@@ -1,6 +1,7 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppConfig {
     // Required keys
     pub finnhub_api_key: String,
@@ -34,16 +35,17 @@ impl AppConfig {
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
         dotenvy::dotenv().ok(); // load .env if present, ignore if missing
         
-        // Envy maps environment variables to the struct based on field names
-        let config: Self = envy::from_env()?;
+        let mut config: Self = envy::from_env()?;
         
-        // Basic validation checking if the essential keys are populated unless mock is forced
-        config.validate()?;
+        if config.validate().is_err() && config.use_mock != "1" {
+            warn!("Missing critical API keys. Automatically tumbling back to USE_MOCK=1 synthetic engine mode.");
+            config.use_mock = "1".to_string();
+        }
         
         Ok(config)
     }
 
-    fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), String> {
         if self.use_mock != "1" {
             if self.finnhub_api_key.trim().is_empty() {
                 return Err("FINNHUB_API_KEY cannot be empty when USE_MOCK=0".into());
@@ -52,6 +54,11 @@ impl AppConfig {
                 return Err("ALPACA_API_KEY cannot be empty when USE_MOCK=0".into());
             }
         }
+        
+        if !self.alpaca_base_url.starts_with("http") {
+             return Err(format!("Invalid Alpaca URL format: {}", self.alpaca_base_url));
+        }
+
         Ok(())
     }
 

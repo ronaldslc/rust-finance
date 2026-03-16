@@ -257,7 +257,33 @@ async fn main() -> Result<()> {
 
     // 4. Ingestion (Source)
     if config.use_mock == "1" {
-        // [Existing mock setup]
+        let (mock_tx, mut mock_rx) = crossbeam_channel::unbounded();
+        let mock_service = ingestion::MockIngestionService::new(mock_tx);
+        
+        let ingestion_eb = event_bus.clone();
+        
+        tokio::spawn(async move {
+            let _ = mock_service.run().await;
+        });
+
+        tokio::spawn(async move {
+            while let Ok(msg) = mock_rx.recv() {
+                // Parse the synthetic message and broadcast to event bus
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&msg) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        for trade in data {
+                            let _ = ingestion_eb.broadcast(BotEvent::MarketEvent {
+                                event_type: "trade".into(),
+                                symbol: trade["s"].as_str().unwrap_or("UNKNOWN").into(),
+                                price: trade["p"].as_f64().unwrap_or(0.0),
+                                volume: trade["v"].as_f64(),
+                                timestamp: trade["t"].as_i64().unwrap_or(chrono::Utc::now().timestamp_millis()),
+                            });
+                        }
+                    }
+                }
+            }
+        });
     } else {
         // Real Ingestion Setup with new Finnhub/Alpaca
         let finnhub_key = config.finnhub_api_key.clone();
@@ -277,22 +303,7 @@ async fn main() -> Result<()> {
                 let _ = fh.run(fh_tx).await;
             });
         } else {
-            // Mock Feed if no API Key is provided
-            let mock_eb = ingestion_eb.clone();
-            tokio::spawn(async move {
-                let mut price = 65000.0;
-                loop {
-                    price += rand::random::<f64>() * 100.0 - 50.0;
-                    mock_eb.broadcast(BotEvent::MarketEvent {
-                        event_type: "trade".into(),
-                        symbol: "BINANCE:BTCUSDT".into(),
-                        price,
-                        volume: Some(rand::random::<f64>() * 2.0),
-                        timestamp: chrono::Utc::now().timestamp_millis(),
-                    });
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                }
-            });
+            error!("USE_MOCK is 0 but FINNHUB_API_KEY is missing. Ingestion failed.");
         }
 
         // 2. Spawn AI components (Dexter & MiroFish)
