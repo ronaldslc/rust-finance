@@ -11,7 +11,6 @@
 
 use std::collections::HashMap;
 use chrono::{DateTime, Utc, Timelike};
-use tracing::warn;
 
 /// SEBI-mandated compliance configuration.
 /// Values based on SEBI Circular SEBI/HO/MRD/DP/CIR/P/2019/116.
@@ -158,17 +157,16 @@ impl SebiCompliance {
         let ist_now = now.with_timezone(&ist_offset);
         let ist_hour = ist_now.hour();
         let ist_minute = ist_now.minute();
-        if matches!(variety, OrderVariety::Mis | OrderVariety::Bo { .. } | OrderVariety::Co { .. }) {
-            if ist_hour > self.cfg.squareoff_time_hour
+        if matches!(variety, OrderVariety::Mis | OrderVariety::Bo { .. } | OrderVariety::Co { .. })
+            && (ist_hour > self.cfg.squareoff_time_hour
                 || (ist_hour == self.cfg.squareoff_time_hour
-                    && ist_minute >= self.cfg.squareoff_time_minute)
+                    && ist_minute >= self.cfg.squareoff_time_minute))
             {
                 return Err(SebiViolation::PastSquareoffTime {
                     hour: self.cfg.squareoff_time_hour,
                     minute: self.cfg.squareoff_time_minute,
                 });
             }
-        }
 
         // ── 3. Short sell uptick rule ───────────────────────────────────────
         if is_sell {

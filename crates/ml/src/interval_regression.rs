@@ -1,7 +1,6 @@
 // Bloomberg NeurIPS 2025: Interval Regression Learning
 // Learn from interval targets where only bid/ask intervals are available
 
-use std::collections::HashMap;
 
 pub fn interval_loss(prediction: f64, lower: f64, upper: f64) -> f64 {
     if prediction < lower {
@@ -138,7 +137,7 @@ impl IntervalNet {
 
         let mut epoch_losses = Vec::with_capacity(epochs);
 
-        for epoch in 0..epochs {
+        for _epoch in 0..epochs {
             let mut epoch_loss = 0.0;
             let mut n_batches = 0;
 

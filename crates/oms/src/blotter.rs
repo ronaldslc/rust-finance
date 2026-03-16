@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 use std::sync::Arc;
 use uuid::Uuid;
-use crate::order::{Order, OrderEvent, OrderStatus, OrderType, Side, TimeInForce};
+use crate::order::{Order, OrderEvent, OrderType, Side, TimeInForce};
 
 /// Pre-trade compliance limits.
 #[derive(Debug, Clone)]
@@ -196,7 +196,7 @@ impl OrderBlotter {
             .get_mut(&order_id)
             .ok_or(ComplianceError::OrderNotFound { id: order_id })?;
 
-        order.apply(event).map_err(|e| ComplianceError::OrderNotFound { id: order_id })
+        order.apply(event).map_err(|_e| ComplianceError::OrderNotFound { id: order_id })
     }
 
     pub async fn get_order(&self, id: Uuid) -> Option<Order> {

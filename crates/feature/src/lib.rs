@@ -16,6 +16,12 @@ pub struct TokenMetrics {
     pub last_5m_reset: Option<SystemTime>,
 }
 
+impl Default for FeatureEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FeatureEngine {
     pub fn new() -> Self {
         Self {

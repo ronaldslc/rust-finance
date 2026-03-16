@@ -19,7 +19,7 @@ impl KalmanFilter {
     /// Step the filter with a new observation (e.g., instantaneous price ratio AssetA/AssetB)
     pub fn step(&mut self, observation: f64) -> f64 {
         // Prediction
-        let mut predicted_estimate = self.estimate;
+        let predicted_estimate = self.estimate;
         let predicted_error_cov = self.error_cov + self.process_noise;
 
         // Kalman Gain

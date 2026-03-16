@@ -114,6 +114,12 @@ pub struct PositionManager {
     positions: HashMap<String, Position>,
 }
 
+impl Default for PositionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PositionManager {
     pub fn new() -> Self {
         Self {

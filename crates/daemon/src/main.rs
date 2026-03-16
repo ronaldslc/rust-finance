@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::Result;
 use crossbeam_channel::bounded;
 use parser::ParserService;
 use ingestion::IngestionArgs;
@@ -32,15 +32,15 @@ async fn main() -> Result<()> {
     let ws_url = std::env::var("SOL_WS").unwrap_or_else(|_| "wss://api.mainnet-beta.solana.com".into());
     let private_key = std::env::var("SOL_PRIVATE_KEY").ok();
     
-    let ingestion_args = IngestionArgs {
+    let _ingestion_args = IngestionArgs {
         ws_url: ws_url.clone(),
         program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
     };
 
     // --- CHANNELS (The Backbone) ---
-    let (raw_tx, raw_rx) = bounded::<String>(100000);
+    let (_raw_tx, raw_rx) = bounded::<String>(100000);
     let (event_tx, event_rx) = bounded::<SwapEvent>(50000);
-    let (action_tx, mut action_rx) = tokio::sync::mpsc::channel::<Action>(10000);
+    let (action_tx, action_rx) = tokio::sync::mpsc::channel::<Action>(10000);
 
     // --- SHARED STATE ---
     let feature_engine = Arc::new(FeatureEngine::new());
@@ -73,13 +73,13 @@ async fn main() -> Result<()> {
     ));
 
     // --- SEBI Compliance ---
-    let sebi_compliance = Arc::new(tokio::sync::RwLock::new(
+    let _sebi_compliance = Arc::new(tokio::sync::RwLock::new(
         oms::sebi::SebiCompliance::new(oms::sebi::SebiConfig::default())
     ));
 
     // --- Risk Engine --- Fix #7: Wire risk engine
     let risk_config = risk::kill_switch::RiskConfig::default();
-    let (mut risk_engine, _risk_rx) = risk::kill_switch::RiskEngine::new(risk_config);
+    let (risk_engine, _risk_rx) = risk::kill_switch::RiskEngine::new(risk_config);
     let kill_switch_handle = risk_engine.kill_switch_handle();
     let order_guard = Arc::new(risk::kill_switch::OrderGuard::new(kill_switch_handle.clone()));
 
@@ -178,8 +178,8 @@ async fn main() -> Result<()> {
                 let exec_clone = e_exec.clone();
                 let db_clone = e_db.clone();
                 let bus_clone = e_bus.clone();
-                let blotter_clone = e_blotter.clone();
-                let pos_clone = e_positions.clone();
+                let _blotter_clone = e_blotter.clone();
+                let _pos_clone = e_positions.clone();
                 
                 tokio::spawn(async move {
                     match exec_clone.execute_action(action.clone()).await {

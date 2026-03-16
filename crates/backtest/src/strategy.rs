@@ -64,7 +64,7 @@ impl Strategy for SimpleMovingAverageCrossover {
         let buf = self
             .prices
             .entry(bar.symbol.clone())
-            .or_insert_with(VecDeque::new);
+            .or_default();
 
         buf.push_back(bar.close);
         if buf.len() > self.slow_period + 1 {
@@ -88,41 +88,38 @@ impl Strategy for SimpleMovingAverageCrossover {
 
         let mut signals = Vec::new();
 
-        match (fast_now, fast_prev, slow_now) {
-            (Some(fast), Some(prev_fast), Some(slow)) => {
-                // Golden cross: fast crossed above slow
-                if fast > slow && prev_fast <= slow && current_pos <= 0.0 {
-                    // Close short if any, then go long
-                    if current_pos < 0.0 {
-                        signals.push(StrategySignal {
-                            symbol: bar.symbol.clone(),
-                            qty: -current_pos,
-                            reason: "close_short",
-                        });
-                    }
+        if let (Some(fast), Some(prev_fast), Some(slow)) = (fast_now, fast_prev, slow_now) {
+            // Golden cross: fast crossed above slow
+            if fast > slow && prev_fast <= slow && current_pos <= 0.0 {
+                // Close short if any, then go long
+                if current_pos < 0.0 {
                     signals.push(StrategySignal {
                         symbol: bar.symbol.clone(),
-                        qty: self.position_size,
-                        reason: "golden_cross_long",
+                        qty: -current_pos,
+                        reason: "close_short",
                     });
                 }
-                // Death cross: fast crossed below slow
-                else if fast < slow && prev_fast >= slow && current_pos >= 0.0 {
-                    if current_pos > 0.0 {
-                        signals.push(StrategySignal {
-                            symbol: bar.symbol.clone(),
-                            qty: -current_pos,
-                            reason: "close_long",
-                        });
-                    }
-                    signals.push(StrategySignal {
-                        symbol: bar.symbol.clone(),
-                        qty: -self.position_size,
-                        reason: "death_cross_short",
-                    });
-                }
+                signals.push(StrategySignal {
+                    symbol: bar.symbol.clone(),
+                    qty: self.position_size,
+                    reason: "golden_cross_long",
+                });
             }
-            _ => {}
+            // Death cross: fast crossed below slow
+            else if fast < slow && prev_fast >= slow && current_pos >= 0.0 {
+                if current_pos > 0.0 {
+                    signals.push(StrategySignal {
+                        symbol: bar.symbol.clone(),
+                        qty: -current_pos,
+                        reason: "close_long",
+                    });
+                }
+                signals.push(StrategySignal {
+                    symbol: bar.symbol.clone(),
+                    qty: -self.position_size,
+                    reason: "death_cross_short",
+                });
+            }
         }
 
         signals
@@ -162,7 +159,7 @@ impl Strategy for ZScoreMeanReversion {
         let buf = self
             .prices
             .entry(bar.symbol.clone())
-            .or_insert_with(VecDeque::new);
+            .or_default();
 
         buf.push_back(bar.close);
         if buf.len() > self.window {

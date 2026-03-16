@@ -80,7 +80,7 @@ pub mod serializer {
 
             // BodyLength (9) is the length in bytes of the message after 9=...<SOH>,
             // i.e., the length of body_part.
-            let body_length = body_part.as_bytes().len();
+            let body_length = body_part.len();
 
             // Construct the full message: optional 8=, then 9=BodyLength, then body_part.
             let mut out = String::new();
@@ -103,6 +103,12 @@ pub mod serializer {
         buffer: Vec<u8>
     }
     
+    impl Default for FixParser {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl FixParser {
         pub fn new() -> Self { Self { buffer: Vec::new() } }
         pub fn push_bytes(&mut self, bytes: &[u8]) {

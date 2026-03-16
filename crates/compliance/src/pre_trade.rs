@@ -2,7 +2,7 @@
 // SEBI 2026 mandatory pre-trade risk checks — every order MUST pass before touching exchange
 
 use crate::errors::ComplianceError;
-use common::models::order::{Order, OrderSide, OrderType};
+use common::models::order::Order;
 
 #[derive(Debug, Clone)]
 pub struct PreTradeConfig {
@@ -63,7 +63,7 @@ impl PreTradeGuard {
 
     fn check_notional_single(&self, order: &Order, last_price: f64) -> Result<(), ComplianceError> {
         let price = order.limit_price.unwrap_or(last_price);
-        let notional = price * order.quantity as f64;
+        let notional = price * order.quantity;
         if notional > self.config.max_single_order_notional_usd {
             return Err(ComplianceError::FatFinger(format!(
                 "Single order notional ${:.0} exceeds limit ${:.0}",
@@ -75,7 +75,7 @@ impl PreTradeGuard {
 
     fn check_daily_notional(&self, order: &Order, last_price: f64) -> Result<(), ComplianceError> {
         let price = order.limit_price.unwrap_or(last_price);
-        let notional = price * order.quantity as f64;
+        let notional = price * order.quantity;
         if self.state.daily_notional_used + notional > self.config.max_daily_notional_usd {
             return Err(ComplianceError::DailyLimitBreached(format!(
                 "Daily notional would reach ${:.0}, limit is ${:.0}",
@@ -104,7 +104,7 @@ impl PreTradeGuard {
 
     fn check_fat_finger_size(&self, order: &Order) -> Result<(), ComplianceError> {
         if self.state.average_order_size > 0.0 {
-            let ratio = order.quantity as f64 / self.state.average_order_size;
+            let ratio = order.quantity / self.state.average_order_size;
             if ratio > self.config.max_order_size_multiplier {
                 return Err(ComplianceError::FatFinger(format!(
                     "Order size {} is {:.1}× average {:.0} (max {:.1}×)",

@@ -86,7 +86,7 @@ impl FixSession {
                     }
                     self.build_header(&mut logon);
                     let out_bytes = logon.encode();
-                    writer.write_all(&out_bytes).await.map_err(|e| FixError::Io(e))?;
+                    writer.write_all(&out_bytes).await.map_err(FixError::Io)?;
 
                     let mut heartbeat_timer = interval(Duration::from_secs(self.config.heartbeat_interval));
                     let mut read_buf = vec![0u8; 8192];
@@ -125,7 +125,7 @@ impl FixSession {
                                 }
 
                                 // Check if target is silent (TestRequest / Disconnect logic)
-                                if last_rx.elapsed() > Duration::from_secs(self.config.heartbeat_interval as u64 + 5) {
+                                if last_rx.elapsed() > Duration::from_secs(self.config.heartbeat_interval + 5) {
                                     warn!("FIX connection timed out (no heartbeat from target)");
                                     break;
                                 }
@@ -179,7 +179,7 @@ impl FixSession {
             self.build_header(&mut resend);
             resend.set_field(7, &expected_seq.to_string()); // BeginSeqNo
             resend.set_field(16, "0"); // EndSeqNo (0 = infinity)
-            writer.write_all(&resend.encode()).await.map_err(|e| FixError::Io(e))?;
+            writer.write_all(&resend.encode()).await.map_err(FixError::Io)?;
             return Ok(());
         } else if incoming_seq < expected_seq {
             let msg_type = msg.get_field(35).map(|s| s.as_str()).unwrap_or("");
@@ -205,7 +205,7 @@ impl FixSession {
                 self.build_header(&mut seq_reset);
                 seq_reset.set_field(36, &(self.outbound_seq.load(Ordering::SeqCst)).to_string()); // NewSeqNo
                 seq_reset.set_field(123, "Y"); // GapFillFlag
-                writer.write_all(&seq_reset.encode()).await.map_err(|e| FixError::Io(e))?;
+                writer.write_all(&seq_reset.encode()).await.map_err(FixError::Io)?;
             }
             MsgType::ExecutionReport | MsgType::OrderCancelReject => {
                 // Forward execution reports up to the OMS

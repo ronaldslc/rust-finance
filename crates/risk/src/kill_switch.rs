@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 // ── Risk Events ──────────────────────────────────────────────────────────────
 

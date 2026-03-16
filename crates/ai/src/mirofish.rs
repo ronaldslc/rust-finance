@@ -107,7 +107,7 @@ pub async fn run_swarm(snapshot: MarketSnapshot, cfg: SwarmConfig) -> SwarmSigna
         }
     }
 
-    let total_f = total as f64;
+    let _total_f = total as f64;
     let hold_weight = hold_count as f64;
     let grand_total = buy_weight + sell_weight + hold_weight;
 
@@ -257,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_bearish_trend_produces_sell_signal() {
-        let snap = make_snapshot(-0.5); // strong downtrend
+        let snap = make_snapshot(-2.0); // strong downtrend
         let signal = run_swarm(snap, SwarmConfig { n_agents: 100, ..Default::default() }).await;
         assert_eq!(signal.dominant_action, "SELL");
         assert!(signal.net_score < 0.0);

@@ -81,6 +81,12 @@ pub struct StrategyRegistry {
     strategies: Arc<RwLock<HashMap<String, BoxedStrategy>>>,
 }
 
+impl Default for StrategyRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StrategyRegistry {
     pub fn new() -> Self {
         Self {

@@ -13,7 +13,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     symbols,
     text::{Line, Span},
-    widgets::{Axis, Block, Borders, BorderType, Chart, Dataset, GraphType, Paragraph, BarChart},
+    widgets::{Axis, Block, Borders, BorderType, Chart, Dataset, GraphType, Paragraph},
     Frame,
 };
 
@@ -236,7 +236,7 @@ fn render_price_area(
     area: Rect,
     data: &[(f64, f64)],
     state: &ChartState,
-    stats: &ChartStats,
+    _stats: &ChartStats,
 ) {
     if data.is_empty() || area.height < 3 {
         return;
@@ -401,7 +401,7 @@ fn render_volume_area(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn generate_time_labels(x_min: f64, x_max: f64, width: u16, time_range: TimeRange) -> Vec<Span<'static>> {
+fn generate_time_labels(_x_min: f64, _x_max: f64, width: u16, time_range: TimeRange) -> Vec<Span<'static>> {
     let months = match time_range {
         TimeRange::Day1 => vec!["9:30", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"],
         TimeRange::Week1 => vec!["Mon", "Tue", "Wed", "Thu", "Fri"],

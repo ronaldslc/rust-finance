@@ -7,7 +7,7 @@
 use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time::timeout;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 /// Token broadcast to all subsystems on shutdown.
 #[derive(Debug, Clone)]

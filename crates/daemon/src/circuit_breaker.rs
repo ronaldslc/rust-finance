@@ -121,16 +121,13 @@ impl CircuitBreaker {
     async fn on_success(&self) {
         let mut inner = self.inner.lock().await;
         inner.consecutive_failures = 0;
-        match &inner.state {
-            BreakerState::HalfOpen => {
-                inner.consecutive_successes += 1;
-                if inner.consecutive_successes >= inner.cfg.success_threshold {
-                    info!(name = %inner.name, "Circuit breaker → Closed");
-                    inner.state = BreakerState::Closed;
-                    inner.consecutive_successes = 0;
-                }
+        if inner.state == BreakerState::HalfOpen {
+            inner.consecutive_successes += 1;
+            if inner.consecutive_successes >= inner.cfg.success_threshold {
+                info!(name = %inner.name, "Circuit breaker → Closed");
+                inner.state = BreakerState::Closed;
+                inner.consecutive_successes = 0;
             }
-            _ => {}
         }
     }
 

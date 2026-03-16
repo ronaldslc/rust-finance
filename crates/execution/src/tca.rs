@@ -129,6 +129,12 @@ pub struct TcaEngine {
     metrics: Vec<TcaMetrics>,
 }
 
+impl Default for TcaEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TcaEngine {
     pub fn new() -> Self {
         Self { fills: Vec::new(), metrics: Vec::new() }

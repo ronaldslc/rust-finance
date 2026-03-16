@@ -192,15 +192,14 @@ impl RollingGarch {
         let tick = self.tick_counts.entry(symbol.to_string()).or_insert(0);
         *tick += 1;
 
-        if !self.states.contains_key(symbol) || *tick % self.reestimate_every == 0 {
-            if history.len() >= self.min_history {
+        if (!self.states.contains_key(symbol) || (*tick).is_multiple_of(self.reestimate_every))
+            && history.len() >= self.min_history {
                 if let Some((params, _)) = GarchEstimator::fit(history) {
                     let initial_var = history.last().map(|r| r * r).unwrap_or(0.0001);
                     let state = GarchState::new(params, initial_var);
                     self.states.insert(symbol.to_string(), state);
                 }
             }
-        }
 
         if let Some(state) = self.states.get_mut(symbol) {
             state.update(log_return);

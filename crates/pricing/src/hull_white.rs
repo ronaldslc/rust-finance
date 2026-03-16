@@ -130,7 +130,7 @@ pub fn trinomial_tree_price(p: &TreeParams) -> f64 {
     let discount = (-r * dt).exp();
     let n_nodes = 2 * n + 1;
 
-    let mut prices: Vec<f64> = (0..n_nodes)
+    let prices: Vec<f64> = (0..n_nodes)
         .map(|i| {
             let j = i as i64 - n as i64;
             if j >= 0 { s * u.powi(j as i32) }
@@ -139,8 +139,8 @@ pub fn trinomial_tree_price(p: &TreeParams) -> f64 {
         .collect();
 
     let mut values: Vec<f64> = prices.iter().map(|&sp| {
-        let intrinsic = if p.is_call { (sp - k).max(0.0) } else { (k - sp).max(0.0) };
-        intrinsic
+        
+        if p.is_call { (sp - k).max(0.0) } else { (k - sp).max(0.0) }
     }).collect();
 
     for step in (0..n).rev() {

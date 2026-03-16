@@ -42,7 +42,7 @@ pub fn spawn_writer(db_path: &Path) -> anyhow::Result<Sender<PersistCommand>> {
         rt.block_on(async move {
             use sqlx_sqlite::SqlitePoolOptions;
             use sqlx_core::executor::Executor;
-            use sqlx_core::query::query;
+            
 
             let pool = SqlitePoolOptions::new()
                 .max_connections(1)

@@ -272,7 +272,7 @@ fn draw_watchlist(f: &mut Frame, area: Rect, app: &App) {
         Constraint::Length(8),
     ];
 
-    let mut table = Table::new(rows, widths)
+    let table = Table::new(rows, widths)
         .header(Row::new(vec!["Symbol", "Price", "Change"]).style(Style::default().fg(TEXT_SECONDARY)))
         .block(block_with_title("Watchlist"));
 

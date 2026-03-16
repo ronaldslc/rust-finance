@@ -132,15 +132,15 @@ impl ConditionalEngine {
     fn eval_condition(cond: &Condition, snap: &MarketSnapshot) -> bool {
         match cond {
             Condition::PriceAbove { symbol, level } =>
-                snap.prices.get(symbol).map_or(false, |&p| p > *level),
+                snap.prices.get(symbol).is_some_and(|&p| p > *level),
             Condition::PriceBelow { symbol, level } =>
-                snap.prices.get(symbol).map_or(false, |&p| p < *level),
+                snap.prices.get(symbol).is_some_and(|&p| p < *level),
             Condition::RsiBelow { symbol, level } =>
-                snap.rsi.get(symbol).map_or(false, |&r| r < *level),
+                snap.rsi.get(symbol).is_some_and(|&r| r < *level),
             Condition::RsiAbove { symbol, level } =>
-                snap.rsi.get(symbol).map_or(false, |&r| r > *level),
+                snap.rsi.get(symbol).is_some_and(|&r| r > *level),
             Condition::VolumeAbove { symbol, level } =>
-                snap.volumes.get(symbol).map_or(false, |&v| v > *level),
+                snap.volumes.get(symbol).is_some_and(|&v| v > *level),
             Condition::PriceChange { symbol, pct, direction } => {
                 let price = snap.prices.get(symbol).copied().unwrap_or(0.0);
                 let ref_p = snap.ref_prices.get(symbol).copied().unwrap_or(price);

@@ -12,7 +12,6 @@ use axum::{
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{info, error};
-use serde::Serialize;
 use common::events::BotEvent; // assuming BotEvent exists in common
 
 #[derive(Clone)]
@@ -58,7 +57,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
             // Forward events from the daemon bus down to the JS client
             Ok(event) = rx.recv() => {
                 if let Ok(json) = serde_json::to_string(&event) {
-                    if socket.send(Message::Text(json.into())).await.is_err() {
+                    if socket.send(Message::Text(json)).await.is_err() {
                         info!("Client disconnected");
                         break;
                     }

@@ -19,7 +19,7 @@ pub async fn generate_signal(news: &str, client: &AnthropicClient) -> Result<AIS
         output_config: Some(OutputConfig { format: "json".to_string() }),
     };
 
-    let response = client.send_message(req).await?;
+    let _response = client.send_message(req).await?;
     
     // In actual implementation, we'd parse the Claude response safely here.
     // For now, we simulate parsing:

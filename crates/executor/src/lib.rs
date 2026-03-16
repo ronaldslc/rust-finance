@@ -44,7 +44,7 @@ impl ExecutorService {
     }
 
     pub async fn execute_action(&self, action: Action) -> Result<Signature> {
-        let (token, size, confidence) = match &action {
+        let (token, size, _confidence) = match &action {
             Action::Buy { token, size, confidence } => (token.clone(), *size, *confidence),
             Action::Sell { token, size, confidence } => (token.clone(), *size, *confidence),
             Action::Hold => return Ok(Signature::default()),

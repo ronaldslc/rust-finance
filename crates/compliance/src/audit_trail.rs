@@ -136,7 +136,7 @@ impl AuditTrail {
     fn read_tail(path: &PathBuf) -> (u64, String) {
         use std::fs::read_to_string;
         let content = match read_to_string(path) { Ok(c) => c, Err(_) => return (0, "0".repeat(64)) };
-        let last_line = content.lines().filter(|l| !l.trim().is_empty()).last();
+        let last_line = content.lines().filter(|l| !l.trim().is_empty()).next_back();
         match last_line {
             Some(line) => {
                 let entry: AuditEntry = serde_json::from_str(line).unwrap_or_else(|_| {

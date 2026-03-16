@@ -98,7 +98,7 @@ impl VarCalculator {
         let var_99 = -sorted.get(idx_99).copied().unwrap_or(0.0).min(0.0);
 
         // CVaR: average of losses beyond VaR threshold
-        let tail_95: Vec<f64> = sorted[..=idx_95].iter().copied().collect();
+        let tail_95: Vec<f64> = sorted[..=idx_95].to_vec();
         let cvar_95 = if !tail_95.is_empty() {
             -tail_95.iter().sum::<f64>() / tail_95.len() as f64
         } else { var_95 };

@@ -44,7 +44,7 @@ impl IngestionService {
             ]
         }).to_string();
 
-        ws_stream.send(Message::Text(subscribe_msg.into())).await.context("Failed to send subscribe message")?;
+        ws_stream.send(Message::Text(subscribe_msg)).await.context("Failed to send subscribe message")?;
         info!("Subscribed to logs for program: {}", self.args.program_id);
 
         while let Some(msg) = ws_stream.next().await {

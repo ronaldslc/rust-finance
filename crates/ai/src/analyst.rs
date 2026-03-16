@@ -1,10 +1,14 @@
 use anyhow::Result;
-use common::events::{BotEvent, ControlCommand};
-use tokio::sync::mpsc;
-use tracing::{info, error};
+use tracing::info;
 
 pub struct DexterAnalyst {
     // API logic to come
+}
+
+impl Default for DexterAnalyst {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DexterAnalyst {

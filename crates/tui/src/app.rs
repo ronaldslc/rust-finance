@@ -419,7 +419,7 @@ impl App {
                     // Sort order book: We want lowest asks at top, highest bids at top
                     // A proper L2 book splits bids and asks into two lists, but since the TUI 
                     // merges them into one row-based table, we just sort by price proximity to mid
-                    let mid_price = (ask_price + bid_price) / 2.0;
+                    let _mid_price = (ask_price + bid_price) / 2.0;
                     
                     // Best asks ascending
                     let mut asks: Vec<_> = self.order_book.iter().filter(|r| r.ask_price > 0.0).map(|r| (r.ask_price, r.ask_size)).collect();

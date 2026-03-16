@@ -3,7 +3,6 @@
 // Backtesting engine — replays historical OHLCV bars through a strategy,
 // simulates fills against bid/ask, and computes performance metrics.
 
-use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
 use crate::strategy::{Strategy, StrategySignal};
 
@@ -103,7 +102,7 @@ impl BacktestEngine {
 
     /// Run a strategy over a sequence of bars.
     pub fn run<S: Strategy>(&mut self, bars: &[Bar], strategy: &mut S) -> BacktestMetrics {
-        for (i, bar) in bars.iter().enumerate() {
+        for (_i, bar) in bars.iter().enumerate() {
             // Execute any pending signals from the previous bar
             if self.cfg.fill_on_next_open {
                 let pending = std::mem::take(&mut self.pending_signals);

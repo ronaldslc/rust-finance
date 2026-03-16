@@ -5,3 +5,7 @@
 .idea
 .vscode
 /Cargo.lock
+
+error.txt
+errors.txt
+check_output.txt

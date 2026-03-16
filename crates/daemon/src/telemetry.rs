@@ -4,7 +4,7 @@
 // Instruments the critical path with spans:
 // market_event → ai_analysis → risk_check → order_submit → rpc_send.
 
-use opentelemetry::{global, trace::TracerProvider};
+use opentelemetry::global;
 use opentelemetry_otlp::WithExportConfig;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 

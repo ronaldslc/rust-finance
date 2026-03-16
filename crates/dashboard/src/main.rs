@@ -6,7 +6,7 @@ use crossterm::{
 };
 use ratatui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph},
     Frame, Terminal,
@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
     loop {
-        terminal.draw(|f| ui(f))?;
+        terminal.draw(ui)?;
 
         if event::poll(Duration::from_millis(250))? {
             if let Event::Key(key) = event::read()? {
