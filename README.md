@@ -7,9 +7,6 @@
   <img src="https://img.shields.io/badge/Anthropic-FF7F50?style=for-the-badge&logo=Anthropic&logoColor=white" alt="Anthropic" />
   <img src="https://img.shields.io/badge/Ratatui-0A0C0F?style=for-the-badge&logo=Linux&logoColor=white" alt="Ratatui" />
   <img src="https://img.shields.io/badge/WebSocket-010101?style=for-the-badge&logo=socket.io&logoColor=white" alt="WebSocket" />
-  <br />
-  <img src="https://img.shields.io/badge/Bloomberg_BVAL-282828?style=for-the-badge&logo=bloomberg&logoColor=white" alt="BVAL" />
-  <img src="https://img.shields.io/badge/NeurIPS_2025-0A2140?style=for-the-badge" alt="NeurIPS" />
   <img src="https://img.shields.io/badge/Quant_Research-000000?style=for-the-badge&logo=python&logoColor=white" alt="Quant" />
   <br />
   <img src="https://img.shields.io/badge/NASDAQ-0090F7?style=for-the-badge&logo=nasdaq&logoColor=white" alt="NASDAQ" />
@@ -34,13 +31,30 @@
 </div>
 
 ## Overview
-A high-performance, ultra low-latency trading terminal and daemon built completely in Rust. Engineered for direct connection to market data streams (Finnhub, Alpaca), real-time AI signal analysis, and Solana-based trade execution.
+
+A Rust-based trading terminal for market data visualization, educational quantitative pricing models, and paper trading simulation. It explores real-time asynchronous architecture using Tokio, TUI rendering with Ratatui, and mock order execution layers.
+
+>  **Status: Early Stage / Educational**  
+> This project is under active development as a free-time educational endeavor. It is **not** suitable for live trading with real capital. It is not professional financial software, lacks regulatory testing, and relies internally on mocked systems or experimental components.
 
 ![Rust Trading Terminal Badge](assets/rust_terminal_badge.png)
 
 ![Rust Trading Terminal](assets/rust_terminal.png)
 
 ![Helper Utilities](assets/helper.png)
+
+## What It Does
+- Connects to Finnhub and Alpaca WebSocket streams for real-time market data
+- Renders a multi-panel dashboard natively in the terminal using Ratatui
+- Explores educational implementations of pricing models (BSM, Heston approximations)
+- Submits simulated/paper trades via Alpaca REST APIs
+- Includes experimental AI signal commentary integrations (via Anthropic API)
+
+## What It Doesn't Do (Out of Scope)
+- Production-grade Institutional Order Management
+- Real FIX 4.4 protocol message serialization
+- Institutional SEBI or SEC regulatory limit compliance
+- Ultra high-frequency trading (no kernel bypass, no FPGA)
 
 ## Table of Contents
 - [Overview](#overview)
@@ -85,18 +99,17 @@ graph TD;
         PostgresWorker --> DB[(PostgreSQL + TimescaleDB)]
     end
     
-    subgraph "Elite Quant Algorithms"
+    subgraph "Quantitative Algorithms Sandbox"
         Strategy --> MM(Avellaneda-Stoikov MM)
         Strategy --> Arb(Z-Score Stat Arb)
         Strategy --> PPO(PPO RL Agent)
     end
     
-    subgraph "Bloomberg Tier Analytics"
+    subgraph "Quantitative Analytics"
         Pricing(Pricing Engine) --> BSM(Black-Scholes-Merton)
         Pricing --> SABR(Hagan SABR Vol Smile)
         Pricing --> HESTON(Heston Stoch Vol)
         Pricing --> HW(Hull-White Rates)
-        Pricing --> BVAL(3-Step Bond Pricer)
         RiskGuard --> GARCH(GARCH MLE Volatility)
         AI --> Interval(Interval Regression ML)
     end
@@ -146,74 +159,44 @@ cargo run -p tui --release
 ```
 
 ### Features
-* **Real-time Market Data:** Direct integrations with Finnhub and Alpaca WebSocket streams for sub-millisecond market events.
-* **Low-Latency Order Execution:** Hardware-accelerated Solana RPC interactions via intelligent `relay` routing (`rpc_router.rs`) with EMA latency tracking and automatic failovers across Helius, Triton, and QuickNode.
-* **Daemon Resilience:** Production-grade `circuit_breaker.rs` for RPC and API protections, exponential backoff WebSocket `reconnect.rs`, and an OS-level graceful `shutdown.rs` multiplexer.
-* **Quantitative Pricing Analytics (`pricing`):** Bloomberg-grade option pricing frameworks including **Black-Scholes-Merton**, **Hagan SABR Volatility**, **Heston Stochastic Vol**, and **Hull-White Trinomial** trees. 
-* **Fixed Income Modeling:** Implemented the exact BVAL 3-step algorithms and corporate WACC default computations native to institutional desks.
-* **Advanced Risk Engines (`risk`):** Automated VaR checks, dynamic Drawdown halts, and **GARCH(1,1) Volatility forecasting**.
-* **Financial Swarm Intelligence (`swarm_sim`):**
-    * Multi-threaded agent engine utilizing `rayon` to simulate thousands of distinct market participants concurrently.
-    * Real-time Agent Profiling representing Retail, Market Makers, Arbitrage bots, and Institutional Hedge Funds.
-    * Extensible **Market Scenario Engine** handling macro shocks like Fed rate hikes, flash crashes, or liquidity vacuums.
-    * Explainable **Interview Engine** providing deep introspection into specific algorithmic triggers and agent decisions.
-* **Dual AI Decision Engines (Anthropic Claude Opus 4.6 Powered):**
-    * **Dexter Analyst AI:** Reads fundamental data and market news via **Opus 4.6**. Opus 4.6 outperforms GPT-5.2 by 144 Elo points on GDPval-AA evaluations (economically valuable finance constraints) making it the top financial analyst model globally.
-    * **MiroFish Swarm AI:** Simulates algorithmic agent iterations and runs via Agent Teams, feeding direct biases into the terminal models.
-    * **Compaction API Integration:** Infinite deep context length allows the daemon to retain rolling multi-week token histories purely on server-side summarizations, reducing overhead significantly.
-    * **NeurIPS 2025 Interval Regression:** Advanced multi-layer perceptron training natively on Bid/Ask spreads without lit prints.
-* **Terminal UI (TUI):** A professional-grade, multi-column dashboard rendered directly in your terminal using Ratatui. Features high-res Braille price charts, live options chains (`options_chain.rs`), and live portfolio P&L tracking.
-* **Institutional Execution Protocol:** Active SEBI pre-trade limits, bracket routing, and native FIX 4.4 serialization layer.
-* **Order Management System (OMS):** Thread-safe blotter, automated portfolio tracking (VWAP, Net Qty), position flipping execution, and PNL calculations.
-* **Backtesting Engine:** Full historical data simulation modeling exact tick fills, explicit slippage limits, commission structures, matching Sharpe/Sortino parameters.
-* **Observability Telemetry:** Complete prometheus-exporter native integration emitting 30+ internal metrics directly coupled to an Axum websocket UI and standard Grafana dashboards.
-* **Ultra-Low Latency Tiered Database:**
-    * **Hot-State Memory:** `DragonflyDB` caching live portfolios and AI signal structures completely lock-free.
-    * **Async Persistence Worker:** Decoupled `tokio::mpsc` queue passing disk I/O onto `PostgreSQL 16` and **TimescaleDB** Hypertables supporting millions of inserts globally without locking the main thread.
+* **Real-time Market Data:** Connections to Finnhub and Alpaca WebSocket streams.
+* **Asynchronous Routing:** Leverages Tokio's MPSC and Broadcast channels for component communication.
+* **Daemon Resilience (WIP):** Experimental `circuit_breaker.rs` framework representing system protections.
+* **Educational Quantitative Models (`pricing`):** Basic frameworks for **Black-Scholes-Merton** integration and volatility tracking.
+* **Simulation Risk Constraints (`risk`):** Basic VaR checks and drawdown halts simulated in the execution path.
+* **Swarm Intelligence Simulator (`swarm_sim`):**
+    * Multi-threaded agent testing engine utilizing `rayon` to simulate concurrent market participant actions.
+    * Explores macro shocks and synthetic order book dynamics.
+* **AI Signal Annotations:**
+    * Interacts with Anthropic Claude models for experimental financial text analysis.
+* **Terminal UI (TUI):** A dashboard rendered directly in your terminal using Ratatui. Features braille price charts, live simulated options chains, and portfolio tracking.
+* **Simulated Execution Tracking (Stubbed/WIP):** Educational mock order routing, basic pre-trade limit assertions, and abstract messaging layers framework.
+* **Order Management System (OMS - Educational):** Educational tracking of abstract position flipping, unrealized PNL arrays, and basic VWAP modeling. No production exchange bindings.
+* **Backtesting Engine (WIP):** An educational framework exploring standard quantitative simulation approaches and constraints.
+* **Ultra-Low Latency Database (WIP/Stubbed):**
+    * **Hot-State Memory:** Experimental `DragonflyDB` concepts caching live abstract portfolios.
+    * **Async Persistence Worker:** Experimental queues intended for later integration with TimescaleDB.
 
-### Reference Latency Architecture
+### Reference Architecture
 
-| System Layer | Technology | Target Latency |
+| System Layer | Implementation Approach | Focus |
 | :--- | :--- | :--- |
-| **In-Process State** | Rust Memory / Lock-Free Ring Buffers | `~50 ns` |
-| **Shared Hot-State** | DragonflyDB (Multi-threaded Redis) | `~0.2 - 0.5 ms` |
-| **Historical Storage**| PostgreSQL 16 + TimescaleDB Async | `~2 - 5 ms` |
+| **In-Process State** | Rust Memory / Channels | Safely routing discrete ticks |
+| **Hot-State** | DragonflyDB / In-Memory Structs | Transient state storage |
+| **Persistence**| PostgreSQL Worker (Stubbed/WIP) | Educational historical logs |
 
-**Critical Trading Path (`memory` → `AI Veto` → `execution`)**: Sub-millisecond (`< 1 ms`) internally.
+## Performance Benchmarks
 
----
+*These metrics represent the theoretical performance of the isolated educational algorithms natively benchmarked using `criterion`, not a complete production system latency.*
 
-## Architectural Supremacy: RustForge vs. MiroFish
+| Component | Benchmark | Execution Time |
+| :--- | :--- | :--- |
+| **Tick Pipeline** | Order book mutation | ~40 ns |
+| **Pricing Models** | BSM European Call | ~34 ns |
+| **Risk Constraints** | GARCH(1,1) Update | ~2.3 ns |
+| **Risk Constraints** | Branchless Safety Check | ~1.6 ns |
 
-RustForge isn't just a port of the MiroFish sociological simulator—it's a fundamental physics upgrade converting an experimental toy into a Wall Street-grade high-frequency trading engine.
 
-### 1. Performance & Throughput
-| Metric | MiroFish (Python/Flask) | RustForge Terminal (Rust) | Improvement Factor |
-| :--- | :--- | :--- | :--- |
-| **Agent Scalability** | ~100s of agents | **100,000+ parallel agents** | **1,000x** |
-| **Concurrency Model**| Asyncio + GIL locking | **Lock-free Atomics + Rayon** | No GIL bottleneck |
-| **Inter-Process Comm**| JSON over REST API/DB | **Zero-copy `mpsc`/`broadcast`**| **>5,000x lower latency** |
-| **Hot Path Latency** | ~200ms+ per loop | **< 1ms internal routing** | **200x speedup** |
-
-> **Live Benchmark Proof**: Tests executed natively via `cargo test --release benchmark_100k_agents` recorded exactly **7.02ms** to instantiate 100,000 agents, and **1.91ms** to resolve a full cycle for all 100,000 agents (spanning probability generation, lock-free global book updates, and imbalance tracking). This equates to running **> 520 full market simulations per second**.
-
-### 2. Native GraphRAG vs. External APIs
-* **MiroFish:** Paid 50ms-200ms latency and cash for Zep Cloud Graph API calls.
-* **RustForge:** Sub-millisecond graph traversals natively in-memory via `petgraph`. Dexter AI can pull up 3 degrees of financial contagion instantly without leaving the daemon.
-
-### 3. Financial Robustness
-* **MiroFish:** Simulated sociological sentiment with no concept of exchange limits or risk math.
-* **RustForge:** Features the `RiskGate` computing **GARCH(1,1) Volatility**, **Maximum Drawdowns**, and **Kelly Criterion** sizing. Contains a real Order Management System to route actual block trades.
-
-### 4. Focused Intelligence (`FusedContext`)
-* **MiroFish:** Chained prompts across multiple Camel-AI agents (slow and token-inefficient).
-* **RustForge:** Condenses Swarm output, Quant data, and GraphRAG into a single `FusedContext` passed directly to Dexter AI for surgical, high-conviction financial decisions.
-
-### 5. Visual Observability
-* **MiroFish:** Basic React web-app charting nodes.
-* **RustForge:** The `ratatui` UI maps pure TCP streams, saving gigabytes of RAM compared to React, while matching Bloomberg-level 9-panel density. Professional keyboard-driven action provides instant emergency execution capabilities.
-
----
 
 ## Quick Start
 1. Ensure you have Rust and Cargo installed (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
@@ -223,27 +206,17 @@ RustForge isn't just a port of the MiroFish sociological simulator—it's a fund
 
 ## Components Deep Dive
 
-RustForge natively implements the top mathematical formulations utilized by elite trading desks and quantitative hedge funds:
+RustForge implements several mathematical formulations for educational study:
 
 ### 1. Heston Stochastic Volatility Model
-Used extensively to capture the volatility smile and skew that classical Black-Scholes fails to price correctly.
+Explores volatility smile mappings.
 *   **Asset Price Dynamics:** `dS = μ·S·dt + √v·S·dW₁`
 *   **Variance Dynamics:** `dv = κ·(θ - v)·dt + σ_v·√v·dW₂`
 *   **Brownian Correlation:** `corr(dW₁, dW₂) = ρ·dt`
 
 ### 2. GARCH(1,1) Volatility Forecasting
-Used by risk management systems to dynamically forecast volatility using Maximum Likelihood Estimation, prioritizing recent market shocks.
+Explores dynamic volatility forecasting.
 *   **Conditional Variance Formulation:** `σ²_t = ω + α·ε²_{t-1} + β·σ²_{t-1}`
-
-### 3. Bloomberg NeurIPS 2025 Interval Regression
-A specialized machine learning Neural Network loss function used to price illiquid corporate bonds purely based on bounded Bid/Ask spreads, bypassing the requirement for noisy "mid-price" assumptions.
-*   **Interval Loss Gradient:**
-    *   `If Prediction < Bid:` `Loss = (Bid - Prediction)²`
-    *   `If Prediction > Ask:` `Loss = (Prediction - Ask)²`
-    *   `Else (Inside Spread):` `Loss = 0`
-
-### 4. Hull-White Trinomial Rate Trees & BVAL
-Proprietary implementation of the **Hull-White One-Factor** model wrapped in a Trinomial Tree algorithm for American interest-rate derivatives, mapping directly against the Bloomberg **BVAL 3-Step** structural bond pricing cascade.
 
 ## Strategy Development
 Strategies are written in the `strategy` crate by implementing the `PluggableStrategy` asynchronous trait:

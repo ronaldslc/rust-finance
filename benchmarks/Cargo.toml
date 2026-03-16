@@ -12,6 +12,8 @@ hdrhistogram = "7.5"
 iai = "0.1"
 dhat = "0.3"
 rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [[bench]]
 name = "01_tick_pipeline"
@@ -24,11 +26,11 @@ path = "benches/03_risk_checks.rs"
 harness = false
 
 [[bench]]
-name = "05_fix_serializer"
-path = "benches/05_fix_serializer.rs"
+name = "02_websocket_parse"
+path = "benches/02_websocket_parse.rs"
 harness = false
 
 [[bench]]
-name = "09_memory_layout"
-path = "benches/09_memory_layout.rs"
+name = "04_pricing_models"
+path = "benches/04_pricing_models.rs"
 harness = false

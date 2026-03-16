@@ -7,7 +7,7 @@ This document summarizes the current state of the High-Performance Rust RL Tradi
 
 ## 1. Project Overview
 
-This is a professional-grade, low-latency cryptocurrency trading terminal built in Rust. It features a decoupled **Daemon** (backend) and **TUI** (frontend) architecture, communicating via a robust bi-directional TCP Event Bus. The system is designed for high-frequency trading on Solana, featuring real-time data ingestion, strategy execution, risk management, and a Bloomberg-style terminal interface.
+This is an educational cryptocurrency trading terminal built in Rust. It features a decoupled **Daemon** (backend) and **TUI** (frontend) architecture, communicating via a bi-directional TCP Event Bus. The system is designed for studying trading systems, featuring data ingestion logic, strategy execution modules, risk management concepts, and a terminal interface.
 
 ## 2. Implemented Features
 
@@ -49,12 +49,12 @@ This is a professional-grade, low-latency cryptocurrency trading terminal built 
   - Responsive Layouts using `Layout::split`.
 
 ## 3. Phase 3: The Intelligence Upgrade (MiroFish to RustForge)
-We have successfully ported and heavily upgraded the sociological simulation concepts from MiroFish into native quantitative code. The system is structurally wired end-to-end.
+We have ported concepts from MiroFish into native Rust code for educational study.
 
-* **Digital Twin Swarm Simulation:** (`crates/swarm_sim/digital_twin.rs`) A 100K-agent parallel simulation engine using Rayon and lock-free atomics to predict flash crashes.
-* **Dexter AI Analyst:** (`crates/ai/dexter.rs`) Single-agent Anthropics Claude logic replacing the bloated 5-agent Camel-AI chain in MiroFish. Uses `FusedContext` (Swarm + Quant + Graph data) for deterministic signal generation.
-* **Native GraphRAG:** Repatriated the Zep AI external dependency into an in-memory `petgraph` ontology lookup, dropping query latency from ~200ms to `< 1ms`.
-* **Risk Gate Verification:** (`crates/risk/gate.rs`) Grounded the AI's predictions with hard math (GARCH(1,1), VaR, Kelly sizing) before permitting order execution.
+* **Digital Twin Swarm Simulation:** (`crates/swarm_sim/digital_twin.rs`) A 100K-agent parallel simulation engine using Rayon.
+* **Dexter AI Analyst:** (`crates/ai/dexter.rs`) Single-agent Anthropics Claude logic replacing the 5-agent Camel-AI chain in MiroFish. Uses `FusedContext` (Swarm + Quant + Graph data) for signal generation.
+* **Native GraphRAG:** Repatriated the Zep AI external dependency into an in-memory `petgraph` ontology lookup.
+* **Risk Gate Verification:** (`crates/risk/gate.rs`) Introduces math-based risk checks (GARCH(1,1), VaR, Kelly sizing) before permitting simulated order execution.
 
 ### RustForge vs. MiroFish Comparative Metrics
 | Metric | MiroFish (Python) | RustForge Terminal (Rust) |
