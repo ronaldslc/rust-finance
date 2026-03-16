@@ -136,17 +136,19 @@ The workspace is organized into discrete, highly decoupled crates:
 
 ## Configuration
 
-The system expects several environment variables to be set for external API integrations:
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
 
-```sh
-export ANTHROPIC_API_KEY="..."
-export FINNHUB_API_KEY="..."
-export ALPACA_API_KEY="..."
-export ALPACA_SECRET_KEY="..."
-export USE_MOCK="1" # Enables mocked market generation for UI testing
+Edit `.env` and add your API keys. See the [Setup Guide (docs/SETUP.md)](docs/SETUP.md) for step-by-step key creation instructions.
+
+Quick test (no keys required):
+```bash
+USE_MOCK=1 cargo run -p daemon --release
 ```
 
-### Running the System
+For the full configuration reference, see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 Start the background daemon process first:
 ```sh

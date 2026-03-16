@@ -29,9 +29,32 @@ async fn main() -> Result<()> {
     info!("Starting High-Performance RL Trading Bot Daemon");
 
     // --- CONFIGURATION ---
-    let rpc_url = std::env::var("SOL_RPC").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".into());
-    let ws_url = std::env::var("SOL_WS").unwrap_or_else(|_| "wss://api.mainnet-beta.solana.com".into());
-    let private_key = std::env::var("SOL_PRIVATE_KEY").ok();
+    let config = match common::config::AppConfig::load() {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to load configuration: {}", e);
+            eprintln!("Failed to load configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    println!("┌─────────────────────────────────────┐");
+    println!("│     RustForge Terminal v0.1.0       │");
+    println!("├─────────────────────────────────────┤");
+    println!("│ Finnhub:    {} │",
+        if !config.finnhub_api_key.trim().is_empty() { "✅ Connected  " } else { "❌ Missing    " });
+    println!("│ Alpaca:     {} │",
+        if !config.alpaca_api_key.trim().is_empty() { "✅ Connected  " } else { "❌ Missing    " });
+    println!("│ AI Engine:  {} │",
+        if config.ai_enabled() { "✅ Enabled    " } else { "⚪ Disabled   " });
+    println!("│ Mock Mode:  {} │",
+        if config.use_mock == "1" { "🟡 Active     " } else { "⚪ Off        " });
+    println!("│ Endpoint:   {} │",
+        if config.alpaca_base_url.contains("paper") { "📄 Paper      " } else { "🔴 LIVE       " });
+    println!("└─────────────────────────────────────┘");
+
+    let rpc_url = "https://api.mainnet-beta.solana.com".to_string();
+    let ws_url = "wss://api.mainnet-beta.solana.com".to_string();
     
     let _ingestion_args = IngestionArgs {
         ws_url: ws_url.clone(),
@@ -47,7 +70,7 @@ async fn main() -> Result<()> {
     let feature_engine = Arc::new(FeatureEngine::new());
     
     // Signer — generate mock keypair if no private key
-    let signer = if let Some(k) = private_key {
+    let signer = if let Some(k) = config.sol_private_key.clone() {
         if let Ok(s) = LocalSigner::from_base58(&k) {
             Some(s)
         } else {
@@ -233,11 +256,11 @@ async fn main() -> Result<()> {
     });
 
     // 4. Ingestion (Source)
-    if std::env::var("USE_MOCK").is_ok() {
+    if config.use_mock == "1" {
         // [Existing mock setup]
     } else {
         // Real Ingestion Setup with new Finnhub/Alpaca
-        let finnhub_key = std::env::var("FINNHUB_API_KEY").unwrap_or_default();
+        let finnhub_key = config.finnhub_api_key.clone();
         let ingestion_eb = event_bus.clone();
 
         // 1. Spawn Finnhub or Mock

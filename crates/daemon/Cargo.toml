@@ -12,6 +12,7 @@ risk = { version = "0.1.0", path = "../risk" }
 executor = { path = "../executor" }
 feature = { path = "../feature" }
 signer = { path = "../signer" }
+dotenvy = "0.15"
 event_bus = { path = "../event_bus" }
 relay = { path = "../relay" }
 persistence = { path = "../persistence" }

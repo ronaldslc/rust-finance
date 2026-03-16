@@ -3,6 +3,7 @@ use std::time::SystemTime;
 pub mod dashboard;
 pub mod events;
 pub mod models;
+pub mod config;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SwapEvent {
