@@ -290,4 +290,25 @@ mod tests {
         assert_eq!(steps.len(), 100);
         assert_eq!(twin.round, 100);
     }
+
+    #[test]
+    #[ignore] // Run with: cargo test --release benchmark_100k_agents -- --ignored --nocapture
+    fn benchmark_100k_agents() {
+        use std::time::Instant;
+        println!("Initializing 100,000 agents for benchmark...");
+        let start = Instant::now();
+        let mut twin = DigitalTwin::new_large_scale("BENCH", 100.0);
+        println!("Initialization took: {:?}", start.elapsed());
+        
+        println!("Running 100 rounds of simulation across 100,000 agents...");
+        let start_sim = Instant::now();
+        let _steps = twin.run_n_rounds(100);
+        let duration = start_sim.elapsed();
+        
+        let avg_ms_per_round = duration.as_secs_f64() * 1000.0 / 100.0;
+        println!("100 rounds took: {:?}", duration);
+        println!("Average time per round (100k agents): {:.2} ms", avg_ms_per_round);
+        
+        assert!(avg_ms_per_round < 100.0, "Performance target failed: {:.2}ms per round", avg_ms_per_round);
+    }
 }
