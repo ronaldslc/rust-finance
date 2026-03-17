@@ -11,6 +11,9 @@
 | `ANTHROPIC_API_KEY` | No | — | Enables AI signal commentary |
 | `USE_MOCK` | No | `0` | `1` = synthetic data, no keys needed |
 | `SOL_PRIVATE_KEY` | No | — | Base58 Solana key (experimental) |
+| `POLYMARKET_PRIVATE_KEY` | No | — | Hex private key for Polymarket CLOB signing |
+| `POLYMARKET_FUNDER_ADDRESS`| No | — | Gnosis Safe proxy wallet address |
+| `POLYMARKET_DRY_RUN`| No | `false` | Set to `true` to disable live orders |
 | `RUST_LOG` | No | `info` | Log level: `debug`, `info`, `warn`, `error` |
 
 *\*Not required when `USE_MOCK=1`*

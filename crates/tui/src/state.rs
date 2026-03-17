@@ -45,6 +45,22 @@ pub struct AppState {
     pub fill_rejection_ratio: String,
     pub session_uptime_min: f64,
     pub connected_venues: Vec<String>,
+
+    // ── Polymarket state ──────────────────────────────────────────
+    pub polymarket: PolymarketState,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PolymarketState {
+    pub markets: Vec<PolymarketMarket>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PolymarketMarket {
+    pub question: String,
+    pub yes_price: f64,
+    pub no_price: f64,
+    pub volume_24hr: f64,
 }
 
 #[derive(Debug, Clone)]

@@ -1,0 +1,483 @@
+// crates/polymarket/src/clob.rs
+
+use crate::auth::{L1Auth, L2Auth, ApiCredentials};
+use crate::signing::{self, Order, create_wallet, sign_order};
+use crate::config::PolymarketConfig;
+use reqwest::Client;
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
+use serde::{Deserialize, Serialize};
+use tracing::{info, warn, error, instrument};
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Side {
+    Buy,
+    Sell,
+}
+
+impl Side {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Side::Buy => "BUY",
+            Side::Sell => "SELL",
+        }
+    }
+
+    /// Polymarket uses 0 for BUY, 1 for SELL in the order struct
+    pub fn as_u8(&self) -> u8 {
+        match self {
+            Side::Buy => 0,
+            Side::Sell => 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OrderType {
+    /// Good-Til-Cancelled (limit order, rests on book)
+    GTC,
+    /// Fill-Or-Kill (market order, fills immediately or cancels)
+    FOK,
+    /// Good-Til-Date (limit order with expiration)
+    GTD,
+}
+
+impl OrderType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            OrderType::GTC => "GTC",
+            OrderType::FOK => "FOK",
+            OrderType::GTD => "GTD",
+        }
+    }
+}
+
+// ─── API Response Types ───
+
+#[derive(Debug, Deserialize)]
+pub struct OrderBookResponse {
+    pub market: Option<String>,
+    pub asset_id: Option<String>,
+    pub bids: Vec<BookLevel>,
+    pub asks: Vec<BookLevel>,
+    pub hash: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct BookLevel {
+    pub price: String,
+    pub size: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MidpointResponse {
+    pub mid: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PriceResponse {
+    pub price: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PostOrderResponse {
+    pub success: Option<bool>,
+    #[serde(rename = "orderID")]
+    pub order_id: Option<String>,
+    pub error_msg: Option<String>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OpenOrder {
+    pub id: String,
+    pub asset_id: String,
+    pub market: Option<String>,
+    pub side: String,
+    pub price: String,
+    pub original_size: String,
+    pub size_matched: String,
+    pub status: String,
+    #[serde(rename = "type")]
+    pub order_type: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct PostOrderBody {
+    pub order: Order,
+    pub signature: String,
+    #[serde(rename = "orderType")]
+    pub order_type: String,
+    pub owner: String,
+}
+
+// ─── Main Client ───
+
+pub struct ClobClient {
+    http: Client,
+    host: String,
+    wallet: ethers_signers::LocalWallet,
+    l2_auth: L2Auth,
+    funder_address: String,
+    signature_type: u8,
+    dry_run: bool,
+}
+
+impl ClobClient {
+    /// Initialize the CLOB client with full L1→L2 auth flow
+    pub async fn new(config: &PolymarketConfig) -> Result<Self, Box<dyn std::error::Error>> {
+        let wallet = create_wallet(&config.private_key)
+            .map_err(|e| format!("Failed to create wallet: {}", e))?;
+
+        // Check if we have stored L2 credentials
+        let credentials = if let (Ok(key), Ok(secret), Ok(pass)) = (
+            std::env::var("POLYMARKET_API_KEY"),
+            std::env::var("POLYMARKET_API_SECRET"),
+            std::env::var("POLYMARKET_API_PASSPHRASE"),
+        ) {
+            info!("Using stored L2 API credentials");
+            ApiCredentials {
+                api_key: key,
+                api_secret: secret,
+                api_passphrase: pass,
+            }
+        } else {
+            // Derive via L1 auth
+            info!("Deriving L2 API credentials via L1 auth...");
+            let l1 = L1Auth::new(wallet.clone());
+            let creds = l1.derive_api_credentials(&config.clob_host).await?;
+            info!("Save these to .env to skip derivation next time:");
+            info!("  POLYMARKET_API_KEY={}", creds.api_key);
+            info!("  POLYMARKET_API_SECRET={}", creds.api_secret);
+            info!("  POLYMARKET_API_PASSPHRASE={}", creds.api_passphrase);
+            creds
+        };
+
+        let l2_auth = L2Auth::new(credentials);
+
+        Ok(Self {
+            http: Client::new(),
+            host: config.clob_host.clone(),
+            wallet,
+            l2_auth,
+            funder_address: config.funder_address.clone(),
+            signature_type: config.signature_type,
+            dry_run: config.dry_run,
+        })
+    }
+
+    // ─── PUBLIC (Unauthenticated) Endpoints ───
+
+    /// GET /book — fetch orderbook for a token
+    #[instrument(skip(self))]
+    pub async fn get_orderbook(
+        &self,
+        token_id: &str,
+    ) -> Result<OrderBookResponse, reqwest::Error> {
+        self.http
+            .get(format!("{}/book", self.host))
+            .query(&[("token_id", token_id)])
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    /// GET /midpoint — fetch midpoint price
+    pub async fn get_midpoint(
+        &self,
+        token_id: &str,
+    ) -> Result<Option<Decimal>, Box<dyn std::error::Error>> {
+        let resp: MidpointResponse = self.http
+            .get(format!("{}/midpoint", self.host))
+            .query(&[("token_id", token_id)])
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(resp.mid.and_then(|m| m.parse::<Decimal>().ok()))
+    }
+
+    /// GET /price — get best price for a side
+    pub async fn get_price(
+        &self,
+        token_id: &str,
+        side: Side,
+    ) -> Result<Option<Decimal>, Box<dyn std::error::Error>> {
+        let resp: PriceResponse = self.http
+            .get(format!("{}/price", self.host))
+            .query(&[("token_id", token_id), ("side", side.as_str())])
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(resp.price.and_then(|p| p.parse::<Decimal>().ok()))
+    }
+
+    /// GET /markets — list all markets
+    pub async fn get_markets(
+        &self,
+    ) -> Result<Vec<serde_json::Value>, reqwest::Error> {
+        self.http
+            .get(format!("{}/markets", self.host))
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    /// GET /markets/{condition_id} — get specific market
+    pub async fn get_market(
+        &self,
+        condition_id: &str,
+    ) -> Result<serde_json::Value, reqwest::Error> {
+        self.http
+            .get(format!("{}/markets/{}", self.host, condition_id))
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    // ─── AUTHENTICATED Endpoints ───
+
+    /// POST /order — place a signed order
+    #[instrument(skip(self))]
+    pub async fn place_order(
+        &self,
+        token_id: &str,
+        side: Side,
+        price: Decimal,
+        size: Decimal,
+        order_type: OrderType,
+        neg_risk: bool,
+    ) -> Result<PostOrderResponse, Box<dyn std::error::Error>> {
+        if self.dry_run {
+            info!(
+                "DRY RUN: {:?} {} @ {} ({}) token={}",
+                side, size, price, order_type.as_str(), token_id
+            );
+            return Ok(PostOrderResponse {
+                success: Some(true),
+                order_id: Some(format!("dry-run-{}", Uuid::new_v4())),
+                error_msg: None,
+                status: Some("DRY_RUN".to_string()),
+            });
+        }
+
+        // Calculate maker/taker amounts from price and size
+        // For BUY: maker_amount = price * size (USDC you pay)
+        //          taker_amount = size (tokens you receive)
+        // For SELL: maker_amount = size (tokens you give)
+        //           taker_amount = price * size (USDC you receive)
+        let (maker_amount, taker_amount) = match side {
+            Side::Buy => {
+                let usdc = price * size;
+                // Convert to 6-decimal USDC units
+                let maker = (usdc * dec!(1_000_000)).to_string();
+                let taker = (size * dec!(1_000_000)).to_string();
+                (maker, taker)
+            }
+            Side::Sell => {
+                let usdc = price * size;
+                let maker = (size * dec!(1_000_000)).to_string();
+                let taker = (usdc * dec!(1_000_000)).to_string();
+                (maker, taker)
+            }
+        };
+
+        let signer_address = format!("{:?}", self.wallet.address());
+        let salt = Uuid::new_v4().as_u128().to_string();
+
+        let order = Order {
+            salt,
+            maker: self.funder_address.clone(),
+            signer: signer_address,
+            taker: "0x0000000000000000000000000000000000000000".to_string(),
+            token_id: token_id.to_string(),
+            maker_amount,
+            taker_amount,
+            expiration: "0".to_string(),
+            nonce: "0".to_string(),
+            fee_rate_bps: "0".to_string(),
+            side: side.as_u8().to_string(),
+            signature_type: self.signature_type.to_string(),
+        };
+
+        // Sign the order via EIP-712
+        let signature = sign_order(&self.wallet, &order, neg_risk)
+            .await
+            .map_err(|e| format!("Signing failed: {}", e))?;
+
+        let body = PostOrderBody {
+            order,
+            signature,
+            order_type: order_type.as_str().to_string(),
+            owner: self.funder_address.clone(),
+        };
+
+        let body_json = serde_json::to_string(&body)?;
+        let path = "/order";
+
+        // Build L2 auth headers
+        let headers = self.l2_auth.build_headers("POST", path, &body_json)?;
+
+        let resp = self.http
+            .post(format!("{}{}", self.host, path))
+            .headers(headers)
+            .body(body_json)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let error_body = resp.text().await.unwrap_or_default();
+            error!("Order placement failed: {} - {}", status, error_body);
+            return Ok(PostOrderResponse {
+                success: Some(false),
+                order_id: None,
+                error_msg: Some(format!("{}: {}", status, error_body)),
+                status: Some("FAILED".to_string()),
+            });
+        }
+
+        let response: PostOrderResponse = resp.json().await?;
+        info!("Order placed: {:?}", response.order_id);
+        Ok(response)
+    }
+
+    /// DELETE /order/{orderId} — cancel a specific order
+    pub async fn cancel_order(
+        &self,
+        order_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if self.dry_run {
+            info!("DRY RUN: cancel order {}", order_id);
+            return Ok(());
+        }
+
+        let path = format!("/order/{}", order_id);
+        let headers = self.l2_auth.build_headers("DELETE", &path, "")?;
+
+        let resp = self.http
+            .delete(format!("{}{}", self.host, path))
+            .headers(headers)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            warn!("Cancel failed: {}", body);
+        }
+
+        Ok(())
+    }
+
+    /// DELETE /cancel-all — cancel all open orders
+    pub async fn cancel_all(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.dry_run {
+            info!("DRY RUN: cancel all orders");
+            return Ok(());
+        }
+
+        let path = "/cancel-all";
+        let headers = self.l2_auth.build_headers("DELETE", path, "")?;
+
+        self.http
+            .delete(format!("{}{}", self.host, path))
+            .headers(headers)
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    /// GET /orders — list open orders
+    pub async fn get_open_orders(
+        &self,
+    ) -> Result<Vec<OpenOrder>, Box<dyn std::error::Error>> {
+        let path = "/orders";
+        let headers = self.l2_auth.build_headers("GET", path, "")?;
+
+        let orders: Vec<OpenOrder> = self.http
+            .get(format!("{}{}", self.host, path))
+            .headers(headers)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(orders)
+    }
+
+    /// GET /balance-allowance — check USDC balance
+    pub async fn get_balance(
+        &self,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let path = "/balance-allowance";
+        let headers = self.l2_auth.build_headers("GET", path, "")?;
+
+        let balance: serde_json::Value = self.http
+            .get(format!("{}{}", self.host, path))
+            .headers(headers)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(balance)
+    }
+
+    // ─── Convenience Methods ───
+
+    /// Place a GTC limit buy order
+    pub async fn limit_buy(
+        &self,
+        token_id: &str,
+        price: Decimal,
+        size: Decimal,
+        neg_risk: bool,
+    ) -> Result<PostOrderResponse, Box<dyn std::error::Error>> {
+        self.place_order(token_id, Side::Buy, price, size, OrderType::GTC, neg_risk)
+            .await
+    }
+
+    /// Place a GTC limit sell order
+    pub async fn limit_sell(
+        &self,
+        token_id: &str,
+        price: Decimal,
+        size: Decimal,
+        neg_risk: bool,
+    ) -> Result<PostOrderResponse, Box<dyn std::error::Error>> {
+        self.place_order(token_id, Side::Sell, price, size, OrderType::GTC, neg_risk)
+            .await
+    }
+
+    /// Place a FOK market buy order (fills immediately or cancels)
+    pub async fn market_buy(
+        &self,
+        token_id: &str,
+        price: Decimal,
+        size: Decimal,
+        neg_risk: bool,
+    ) -> Result<PostOrderResponse, Box<dyn std::error::Error>> {
+        self.place_order(token_id, Side::Buy, price, size, OrderType::FOK, neg_risk)
+            .await
+    }
+
+    /// Place a FOK market sell order
+    pub async fn market_sell(
+        &self,
+        token_id: &str,
+        price: Decimal,
+        size: Decimal,
+        neg_risk: bool,
+    ) -> Result<PostOrderResponse, Box<dyn std::error::Error>> {
+        self.place_order(token_id, Side::Sell, price, size, OrderType::FOK, neg_risk)
+            .await
+    }
+}

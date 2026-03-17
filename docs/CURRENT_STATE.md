@@ -1,9 +1,9 @@
 # Project Status & Documentation
 
 **Last Updated**: March 17, 2026
-**Version**: 0.3.0-beta
+**Version**: 0.4.0-alpha (Polymarket Integration Phase 1)
 
-This document summarizes the current state of the High-Performance Rust RL Trading Bot, detailing the Phase 3 MiroFish intelligence integration, implemented features, and usage instructions.
+This document summarizes the current state of the High-Performance Rust RL Trading Bot, detailing the custom Polymarket lightweight client integration, the Phase 3 MiroFish intelligence integration, implemented features, and usage instructions.
 
 ## 1. Project Overview
 
@@ -18,6 +18,7 @@ This is an educational cryptocurrency trading terminal built in Rust. It feature
   - **Strategy Engine**: Modular strategy trait. Currently implements a `SimpleStrategy` (momentum-based) and placeholder for `RLStrategy`.
   - **Risk Engine**: Pre-trade risk validation (max position size, daily loss limit, confidence thresholds).
   - **Executor**: Async transaction execution. Supports `MockExecutor` for paper trading and `RealExecutor` for live signing/sending.
+- **Polymarket Client**: A custom, lightweight, zero-dependency-conflict client for interacting with Polymarket's Gamma and CLOB APIs. Uses `reqwest` for REST, `tokio-tungstenite` for WebSockets, and `ethers-core`/`ethers-signers` for EIP-712 order signing without pulling in the heavy `alloy` dependency tree.
 - **Event Bus**:
   - **Bi-Directional Communication**: TCP-based (Tokio) messaging system. The daemon broadcasts events (Prices, Signals, PnL) to all connected clients and receives control commands (Pause, Kill Switch, Trade) from the TUI.
   - **Reliable Broadcasting**: Uses `tokio::sync::mpsc` channels with an `Arc<Mutex<Vec<Sender>>>` structure to manage multiple concurrent clients.

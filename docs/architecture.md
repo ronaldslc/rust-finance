@@ -9,8 +9,9 @@ RustForge Terminal is a low-latency, modular trading architecture built heavily 
 4. **Resiliency over Uptime:** Alpaca WebSockets and TCP EventBus connections feature exponential backoffs (`tokio-retry`) to outlast network drops.
 
 ## Component Flow
-- **Component Flow**: Ingestion -> AI & Strategy -> OMS -> Risk KillSwitch -> Execution/Relay.
+- **Component Flow**: Ingestion -> AI & Strategy -> OMS -> Risk KillSwitch -> Execution/Relay/Polymarket.
 - **Relay Router:** Routes transactions via available JSON-RPC nodes.
+- **Polymarket Engine:** A custom, lightweight (`reqwest` + `ethers-core`) client connecting natively to Polygon to sign EIP-712 typed orders. By removing the official SDK, the daemon completely avoids deep `solana-sdk` ↔ `alloy` cryptography dependency conflicts.
 - **Strategy & AI (Opus 4.6 Routing):** DL models act on the normalized stream. PPO Agents and Statistical Arbitrage evaluate. The daemon implements a gated probability router in `ai_pipeline.rs`.
   - Includes **Mirofish Swarm** for 5,000-agent deterministic probability analysis.
   - Includes server-side **Compaction API** blocks to handle context retention natively.

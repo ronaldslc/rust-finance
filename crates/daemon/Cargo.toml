@@ -23,7 +23,7 @@ chrono = "0.4"
 rand = "0.8"
 
 # solana
-solana-sdk = "1.18"
+solana-sdk = { version = "1.18" }
 
 # async/runtime
 tokio = { version = "1.35", features = ["full"] }
@@ -51,3 +51,4 @@ clap = { version = "4.4", features = ["derive", "env"] }
 knowledge_graph = { version = "0.1.0", path = "../knowledge_graph" }
 swarm_sim = { version = "0.1.0", path = "../swarm_sim" }
 execution = { version = "0.1.0", path = "../execution" }
+polymarket = { path = "../polymarket" }

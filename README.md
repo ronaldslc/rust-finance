@@ -4,6 +4,8 @@
   <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust" />
   <img src="https://img.shields.io/badge/Tokio-1A2421?style=for-the-badge&logo=Rust&logoColor=white" alt="Tokio" />
   <img src="https://img.shields.io/badge/Solana-14F195?style=for-the-badge&logo=Solana&logoColor=white" alt="Solana" />
+  <img src="https://img.shields.io/badge/Polygon-8247E5?style=for-the-badge&logo=Polygon&logoColor=white" alt="Polygon" />
+  <img src="https://img.shields.io/badge/Polymarket-000000?style=for-the-badge&logo=Polymarket&logoColor=white" alt="Polymarket" />
   <img src="https://img.shields.io/badge/Anthropic-FF7F50?style=for-the-badge&logo=Anthropic&logoColor=white" alt="Anthropic" />
   <img src="https://img.shields.io/badge/Ratatui-0A0C0F?style=for-the-badge&logo=Linux&logoColor=white" alt="Ratatui" />
   <img src="https://img.shields.io/badge/WebSocket-010101?style=for-the-badge&logo=socket.io&logoColor=white" alt="WebSocket" />
@@ -45,9 +47,11 @@ A Rust-based trading terminal for market data visualization, educational quantit
 
 ## What It Does
 - Connects to Finnhub and Alpaca WebSocket streams for real-time market data
+- Integrates with Polymarket CLOB and Gamma APIs for decentralized prediction markets
 - Renders a multi-panel dashboard natively in the terminal using Ratatui
 - Explores educational implementations of pricing models (BSM, Heston approximations)
 - Submits simulated/paper trades via Alpaca REST APIs
+- Tracks target proxy wallets for copy-trading on Polymarket
 - Includes experimental AI signal commentary integrations (via Anthropic API)
 
 ## What It Doesn't Do (Out of Scope)
@@ -94,6 +98,8 @@ graph TD;
         Exec -.-> |Dry Run Mode| Mock(Paper Trading)
         Exec --> |Live Mode| Blockchain(Solana RPC/Jupiter)
         
+        Daemon --> PolymarketClient(Custom Lightweight Client / Polygon)
+        
         Daemon --> Redis[(DragonflyDB Hot-State)]
         Daemon --> PostgresWorker(Async Persistence Worker)
         PostgresWorker --> DB[(PostgreSQL + TimescaleDB)]
@@ -130,6 +136,7 @@ The workspace is organized into discrete, highly decoupled crates:
 * **`ingestion`**: Connects to `Finnhub` and `Alpaca` WebSockets. Normalizes trade and quote data into a zero-allocation `MarketEvent` format (using `compact_str`) to eliminate heap allocations on the hot path.
 * **`relay`**: Handles network routing and edge measurement. Specifically benchmarks multiple RPC nodes (Helius, Triton, QuickNode) and routes transactions through the lowest-latency path available.
 * **`event_bus`**: Powered by `tokio::sync::broadcast` and `postcard` binary serialization for zero-copy, microsecond-latency network message transitions between the Daemon and UI.
+* **`polymarket`**: Interacts with the Polymarket prediction market smart contracts on the Polygon blockchain via a custom, lightweight, zero-dependency-conflict client (using `reqwest` and `ethers-core`). Includes websocket streaming and copy trading wallet monitoring.
 * **`swarm_sim`**: A comprehensive multi-agent financial market swarm simulation engine. Integrates agent profiles (Retail, Hedge Fund, Market Maker, etc.) to model complex market behaviors, sentiment shocks, and price impacts concurrently using rayon.
 * **`persistence`**: Storage layer designed to record transactional records, system P&L tracking, order history, and large-scale action logs for swarm agents.
 * **`common`**: Shared models, structs, commands, and `BotEvent` enumerations used across all systems to guarantee strict typing on inter-process communications.

@@ -1,0 +1,45 @@
+[package]
+name = "polymarket"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# === Already in workspace ===
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+
+# === HTTP client ===
+reqwest = { version = "0.12", default-features = true, features = ["json"] }
+
+# === WebSocket ===
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
+
+# === Crypto for EIP-712 signing ===
+ethers-core = { version = "2.0", default-features = false }
+ethers-signers = { version = "2.0", default-features = false }
+
+# === Decimal math ===
+rust_decimal = "1.36"
+rust_decimal_macros = "1.36"
+
+# === Hashing for HMAC auth ===
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+hex = "0.4"
+
+# === Utilities ===
+thiserror = { workspace = true }
+url = "2"
+dotenvy = "0.15"
+envy = "0.4"
+anyhow = "1.0"
+uuid = { workspace = true }
+
+# === Workspace internal ===
+common = { path = "../common" }
+event_bus = { path = "../event_bus" }

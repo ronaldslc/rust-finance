@@ -23,6 +23,95 @@ pub mod strategy_registry;
 pub mod telemetry;
 pub mod hybrid_pipeline;
 
+use polymarket::{
+    config::PolymarketConfig,
+    websocket::PolymarketWs,
+    gamma::GammaClient,
+};
+
+async fn spawn_polymarket(event_bus: common::events::EventBusHandle) {
+    let config = match PolymarketConfig::from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("Failed to load Polymarket config: {}", e);
+            return;
+        }
+    };
+
+    let gamma = GammaClient::new(&config.gamma_host);
+    let markets = gamma.get_active_markets(50, 0).await.unwrap_or_default();
+    tracing::info!("Discovered {} active Polymarket markets", markets.len());
+
+    let asset_ids: Vec<String> = markets
+        .iter()
+        .flat_map(|m| m.tokens.iter().map(|t| t.token_id.clone()))
+        .collect();
+
+    let (poly_tx, _) = tokio::sync::broadcast::channel(4096);
+    let ws = PolymarketWs::new(&config.ws_market_url, poly_tx.clone());
+    
+    tokio::spawn(async move {
+        let _ = ws.connect_market_channel(asset_ids).await;
+    });
+
+    let mut poly_rx = poly_tx.subscribe();
+    let bus = event_bus;
+    
+    tokio::spawn(async move {
+        while let Ok(evt) = poly_rx.recv().await {
+            match evt {
+                polymarket::websocket::PolymarketEvent::PriceUpdate(pc) => {
+                    if let Some(changes) = pc.price_changes {
+                        for change in changes {
+                            let _ = bus.broadcast(BotEvent::PolymarketPriceChange {
+                                asset_id: change.asset_id,
+                                price: change.price,
+                                side: change.side.unwrap_or_default(),
+                            });
+                        }
+                    }
+                }
+                polymarket::websocket::PolymarketEvent::BookSnapshot(b) => {
+                    let _ = bus.broadcast(BotEvent::PolymarketBookUpdate {
+                        asset_id: b.asset_id,
+                        bids: b.bids.unwrap_or_default().into_iter().map(|l| (l.price, l.size)).collect(),
+                        asks: b.asks.unwrap_or_default().into_iter().map(|l| (l.price, l.size)).collect(),
+                    });
+                }
+                polymarket::websocket::PolymarketEvent::MarketResolved { market, winning_outcome, .. } => {
+                     let _ = bus.broadcast(BotEvent::PolymarketMarketResolved {
+                         market,
+                         winning_outcome,
+                     });
+                }
+                _ => {}
+            }
+        }
+    });
+}
+
+async fn run_swarm_analysis(
+    market_price: rust_decimal::Decimal,
+    market_context: &str,
+    swarm: &mut ai::simulator::MiroFishSimulator, // using MiroFish Simulator from ai crate
+) -> Option<common::events::BotEvent> {
+    // Implementation placeholder based on the prompt's pseudo code
+    let divergence = rust_decimal::Decimal::new(0, 0); // Placeholder
+    
+    if divergence > rust_decimal::Decimal::new(5, 2) {
+        let side = "BUY";
+        Some(common::events::BotEvent::PolymarketTradeSignal {
+            token_id: "token".into(),
+            side: side.to_string(),
+            price: market_price.to_string(),
+            size: "10.0".to_string(), // Kelly-sized in production
+            source: "swarm_sim".to_string(),
+        })
+    } else {
+        None
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -316,6 +405,13 @@ async fn main() -> Result<()> {
         tokio::spawn(async move {
             let _ = mirofish.run().await;
         });
+
+        // Spawn Polymarket
+        let pm_eb = event_bus.clone();
+        tokio::spawn(async move {
+            spawn_polymarket(pm_eb).await;
+        });
+
 
         // 3. Multi-Exchange Heartbeat Telemetry
         let heartbeat_eb = event_bus.clone();

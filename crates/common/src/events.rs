@@ -62,6 +62,35 @@ pub enum BotEvent {
         status: CompactString,
         latency_ms: f64,
     },
+
+    // Polymarket events
+    PolymarketBookUpdate {
+        asset_id: String,
+        bids: Vec<(String, String)>,
+        asks: Vec<(String, String)>,
+    },
+    PolymarketPriceChange {
+        asset_id: String,
+        price: String,
+        side: String,
+    },
+    PolymarketTradeSignal {
+        token_id: String,
+        side: String,  // "BUY" or "SELL"
+        price: String,
+        size: String,
+        source: String, // "copy_trade", "swarm_sim", "ai_signal"
+    },
+    PolymarketOrderFilled {
+        order_id: String,
+        token_id: String,
+        fill_price: String,
+        fill_size: String,
+    },
+    PolymarketMarketResolved {
+        market: String,
+        winning_outcome: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -44,6 +44,11 @@ cp .env.example .env
 **Without this key:** Terminal works normally, AI features disabled
 **Cost estimate:** ~$0.01-0.05 per analysis call (Sonnet)
 
+### Polymarket (Optional — Prediction Markets)
+1. You only need a private key if you intend to send real transactions via the CLOB API.
+2. For read-only access (Orderbook, Markets, Copy Trading signals), no real key is required; `POLYMARKET_DRY_RUN=true` will suffice.
+3. If trading, paste a funded wallet (Polygon network) private key into `POLYMARKET_PRIVATE_KEY` and target Gnosis Safe proxy into `POLYMARKET_FUNDER_ADDRESS`.
+
 ## Step 3: Test Your Configuration
 ```bash
 # Check if keys are loaded

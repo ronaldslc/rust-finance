@@ -108,16 +108,19 @@ pub fn render(f: &mut Frame, state: &AppState) {
     render_dexter_panel(f, dexter_panel, state);
     render_swarm_panel(f, swarm_panel, state);
 
-    // ── Right: Open Positions + News ─────────────────────────────────────
+    // ── Right: Open Positions + Polymarket + News ─────────────────────────────────────
     let right_areas = Layout::vertical([
+        Constraint::Length(12),
         Constraint::Length(12),
         Constraint::Fill(1),
     ]).split(right_col);
     
     let positions = right_areas[0];
-    let news = right_areas[1];
+    let polymarket = right_areas[1];
+    let news = right_areas[2];
 
     render_positions(f, positions, state);
+    render_polymarket_panel(f, polymarket, state);
     render_news_feed(f, news, state);
 }
 
@@ -546,4 +549,33 @@ fn render_status_bar(f: &mut Frame, area: Rect, state: &AppState) {
         Paragraph::new(status).style(Style::default().fg(DIM)),
         area,
     );
+}
+
+fn render_polymarket_panel(f: &mut Frame, area: Rect, state: &AppState) {
+    let block = Block::default()
+        .title(Span::styled(" Polymarket ", Style::default().fg(CYAN)))
+        .borders(Borders::ALL);
+
+    let header = Row::new(vec!["Market", "YES", "NO", "24h Vol"])
+        .style(Style::default().fg(DIM));
+
+    let rows: Vec<Row> = state.polymarket.markets.iter().map(|m| {
+        Row::new(vec![
+            Cell::from(m.question.chars().take(40).collect::<String>()),
+            Cell::from(format!("YES: ${:.2}", m.yes_price)).style(Style::default().fg(GREEN)),
+            Cell::from(format!("NO: ${:.2}", m.no_price)).style(Style::default().fg(RED)),
+            Cell::from(format!("Vol: ${:.0}", m.volume_24hr)),
+        ])
+    }).collect();
+
+    let table = Table::new(rows, [
+        Constraint::Percentage(50),
+        Constraint::Percentage(15),
+        Constraint::Percentage(15),
+        Constraint::Percentage(20),
+    ])
+    .header(header)
+    .block(block);
+
+    f.render_widget(table, area);
 }
