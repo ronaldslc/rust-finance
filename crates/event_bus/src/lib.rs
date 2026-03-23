@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use tokio::{
     net::TcpListener,
     io::{AsyncWriteExt, AsyncReadExt},

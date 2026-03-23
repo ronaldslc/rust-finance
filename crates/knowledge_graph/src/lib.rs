@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 // ============================================================
 // knowledge_graph — Financial Entity Knowledge Graph
 // Part of RustForge Terminal (rust-finance)

@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 pub mod bsm;
 pub mod sabr;
 pub mod fundamental;

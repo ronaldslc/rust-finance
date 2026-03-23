@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 // crates/cli/src/main.rs
 // RustForge CLI entrypoint
 

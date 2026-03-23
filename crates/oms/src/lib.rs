@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 // crates/oms/src/lib.rs
 //
 // Order Management System (OMS)

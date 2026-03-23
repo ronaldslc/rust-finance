@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 pub mod gateway;
 pub mod mock_executor;
 pub mod alpaca_executor;

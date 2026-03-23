@@ -1,7 +1,21 @@
-avoid-breaking-exported-api = false
+# clippy.toml — place in repo root
+# Enforce cognitive complexity limits for trading-critical code
 cognitive-complexity-threshold = 30
-too-many-arguments-threshold = 10
+
+# Flag large types being passed by value
+too-large-for-stack = 200
+
+# Disallow large enum variants
+enum-variant-size-threshold = 200
+
+# Warn about functions with too many arguments
+too-many-arguments-threshold = 8
+
+# Type complexity threshold
 type-complexity-threshold = 250
+
+# Enum variant name repetition threshold
 enum-variant-name-threshold = 5
 
-# Allow standard doc omissions for internal project until phase 5
+# Allow breaking exported API changes during development
+avoid-breaking-exported-api = false

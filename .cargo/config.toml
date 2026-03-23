@@ -1,6 +1,9 @@
+# .cargo/config.toml
 [build]
-rustflags = ["-C", "target-cpu=native"]
+# Deny all warnings at build level + optimize for native CPU
+rustflags = ["-D", "warnings", "-C", "target-cpu=native"]
 
+# Ensure release builds are optimized and stripped
 [profile.release]
 opt-level = 3
 lto = "fat"

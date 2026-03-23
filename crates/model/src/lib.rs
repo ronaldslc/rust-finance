@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use common::Action;
 use anyhow::Result;
 

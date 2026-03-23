@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 pub mod alpaca;
 pub mod alpaca_ws;
 pub mod finnhub_ws;

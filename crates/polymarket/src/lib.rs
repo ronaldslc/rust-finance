@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 // crates/polymarket/src/lib.rs
 
 pub mod config;

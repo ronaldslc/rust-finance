@@ -1,2 +1,3 @@
+#![forbid(unsafe_code)]
 pub mod gex;
 pub mod indicators;

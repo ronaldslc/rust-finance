@@ -1,0 +1,38 @@
+[package]
+name = "rust-finance-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+common = { path = "../crates/common" }
+ingestion = { path = "../crates/ingestion" }
+risk = { path = "../crates/risk" }
+
+# Prevent this from interfering with the workspace
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_config_parser"
+path = "fuzz_targets/fuzz_config_parser.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_sse_parser"
+path = "fuzz_targets/fuzz_sse_parser.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_market_event"
+path = "fuzz_targets/fuzz_market_event.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_order_validation"
+path = "fuzz_targets/fuzz_order_validation.rs"
+doc = false

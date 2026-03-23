@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 // crates/strategy/src/lib.rs
 // v2 Strategy trait + concrete implementations
 

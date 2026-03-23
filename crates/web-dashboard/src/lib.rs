@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade, Message}, 
     response::{Html, Response}, 

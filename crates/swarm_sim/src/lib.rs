@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 // ============================================================
 // swarm_sim — Financial Market Swarm Simulation Engine
 // Part of RustForge Terminal (rust-finance)

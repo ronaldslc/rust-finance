@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use serde::{Serialize, Deserialize};
 use std::path::Path;
 use std::sync::mpsc::{self, Sender};

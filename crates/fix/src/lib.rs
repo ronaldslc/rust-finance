@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 // crates/fix/src/lib.rs
 //
 // Root module for the FIX Engine layer.

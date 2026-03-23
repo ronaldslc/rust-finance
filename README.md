@@ -1,6 +1,16 @@
 # RustForge Terminal (rust-finance)
 
 <div align="center">
+
+  [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Ashutosh0x/rust-finance/badge)](https://scorecard.dev/viewer/?uri=github.com/Ashutosh0x/rust-finance)
+  [![Security Audit](https://github.com/Ashutosh0x/rust-finance/actions/workflows/security.yml/badge.svg)](https://github.com/Ashutosh0x/rust-finance/actions/workflows/security.yml)
+  [![CI Tests](https://github.com/Ashutosh0x/rust-finance/actions/workflows/test.yml/badge.svg)](https://github.com/Ashutosh0x/rust-finance/actions/workflows/test.yml)
+  [![dependency status](https://deps.rs/repo/github/Ashutosh0x/rust-finance/status.svg)](https://deps.rs/repo/github/Ashutosh0x/rust-finance)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+</div>
+
+<div align="center">
   <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust" />
   <img src="https://img.shields.io/badge/Tokio-1A2421?style=for-the-badge&logo=Rust&logoColor=white" alt="Tokio" />
   <img src="https://img.shields.io/badge/Ratatui-0A0C0F?style=for-the-badge&logo=Linux&logoColor=white" alt="Ratatui" />

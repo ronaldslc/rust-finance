@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 // crates/metrics/src/lib.rs
 //
 // Prometheus metrics registry for RustForge.

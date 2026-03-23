@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use common::SwapEvent;
 use dashmap::DashMap;
 use std::sync::Arc;

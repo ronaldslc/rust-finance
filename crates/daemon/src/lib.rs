@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! Rust finance daemon: market data, strategy, risk, execution.
 
 pub mod bootstrap;

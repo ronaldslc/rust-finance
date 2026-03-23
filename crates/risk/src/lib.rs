@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 pub mod interceptor;
 pub mod safety_gate;
 pub mod state;
