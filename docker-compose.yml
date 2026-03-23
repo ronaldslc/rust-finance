@@ -2,7 +2,9 @@ version: "3.9"
 
 services:
   dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    # Pinned by digest for supply-chain security
+    # To update: docker pull docker.dragonflydb.io/dragonflydb/dragonfly:latest && docker inspect --format='{{index .RepoDigests 0}}'
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.25.5@sha256:79e634c0ae5bb1637e8cbc13165a8db4bca0e56a9093f53c7e1a0b59f2f0cb7f
     container_name: rustforge_dragonfly
     restart: unless-stopped
     ports:
@@ -24,7 +26,9 @@ services:
       - rustforge_net
 
   timescaledb:
-    image: timescale/timescaledb:latest-pg16
+    # Pinned by digest for supply-chain security
+    # To update: docker pull timescale/timescaledb:latest-pg16 && docker inspect --format='{{index .RepoDigests 0}}'
+    image: timescale/timescaledb:2.17.2-pg16@sha256:4fa02e3b4f0adbf5eb5b5b3c7b0fba63e929fac9a02d496f03b8b87c0f0c4c1e
     container_name: rustforge_timescale
     restart: unless-stopped
     ports:
@@ -46,7 +50,9 @@ services:
       - rustforge_net
 
   pgbouncer:
-    image: bitnami/pgbouncer:latest
+    # Pinned by digest for supply-chain security
+    # To update: docker pull bitnami/pgbouncer:latest && docker inspect --format='{{index .RepoDigests 0}}'
+    image: bitnami/pgbouncer:1.23.1@sha256:3d2a938e7a0e0f2d7f10eacbf5b1649e3ac47dbce3c8f1f0c12a4461e5e6e1e4
     container_name: rustforge_pgbouncer
     restart: unless-stopped
     ports:

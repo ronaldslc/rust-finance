@@ -8,6 +8,7 @@ on:
   push:
     branches: [main]
 
+# NO top-level env or defaults — required by scorecard-action
 permissions: read-all
 
 jobs:
@@ -19,6 +20,9 @@ jobs:
       id-token: write          # publish results + OIDC
       contents: read
       actions: read
+      issues: read             # better detection
+      pull-requests: read      # better detection
+      checks: read             # better detection
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -30,9 +34,6 @@ jobs:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
-          # To see Branch Protection results, create a PAT with repo scope
-          # and store it as SCORECARD_TOKEN, then uncomment:
-          # repo_token: ${{ secrets.SCORECARD_TOKEN }}
 
       - name: Upload Scorecard SARIF
         uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
