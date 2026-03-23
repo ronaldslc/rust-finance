@@ -1,16 +1,6 @@
 # RustForge Terminal (rust-finance)
 
 <div align="center">
-
-  [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Ashutosh0x/rust-finance/badge)](https://scorecard.dev/viewer/?uri=github.com/Ashutosh0x/rust-finance)
-  [![Security Audit](https://github.com/Ashutosh0x/rust-finance/actions/workflows/security.yml/badge.svg)](https://github.com/Ashutosh0x/rust-finance/actions/workflows/security.yml)
-  [![CI Tests](https://github.com/Ashutosh0x/rust-finance/actions/workflows/test.yml/badge.svg)](https://github.com/Ashutosh0x/rust-finance/actions/workflows/test.yml)
-  [![dependency status](https://deps.rs/repo/github/Ashutosh0x/rust-finance/status.svg)](https://deps.rs/repo/github/Ashutosh0x/rust-finance)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-</div>
-
-<div align="center">
   <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust" />
   <img src="https://img.shields.io/badge/Tokio-1A2421?style=for-the-badge&logo=Rust&logoColor=white" alt="Tokio" />
   <img src="https://img.shields.io/badge/Ratatui-0A0C0F?style=for-the-badge&logo=Linux&logoColor=white" alt="Ratatui" />
@@ -36,6 +26,12 @@
   <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS" />
   <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux" />
+  <br />
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Ashutosh0x/rust-finance"><img src="https://img.shields.io/ossf-scorecard/github.com/Ashutosh0x/rust-finance?style=for-the-badge&label=OpenSSF%20Scorecard" alt="OpenSSF Scorecard" /></a>
+  <a href="https://github.com/Ashutosh0x/rust-finance/actions/workflows/security.yml"><img src="https://img.shields.io/github/actions/workflow/status/Ashutosh0x/rust-finance/security.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=Security" alt="Security Audit" /></a>
+  <a href="https://github.com/Ashutosh0x/rust-finance/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/Ashutosh0x/rust-finance/test.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=CI%20Tests" alt="CI Tests" /></a>
+  <a href="https://deps.rs/repo/github/Ashutosh0x/rust-finance"><img src="https://img.shields.io/badge/dependencies-up%20to%20date-brightgreen?style=for-the-badge" alt="dependency status" /></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License: MIT" /></a>
 </div>
 
 ---
