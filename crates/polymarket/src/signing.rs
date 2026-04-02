@@ -1,7 +1,7 @@
 // crates/polymarket/src/signing.rs
 
 use ethers_core::types::{
-    transaction::eip712::{EIP712Domain, Eip712},
+    transaction::eip712::EIP712Domain,
     Address, U256, H256,
 };
 use ethers_signers::{LocalWallet, Signer};

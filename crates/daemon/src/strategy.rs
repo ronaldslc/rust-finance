@@ -8,6 +8,7 @@ pub trait Strategy: Send + Sync {
     async fn on_market_event(&mut self, event: &Envelope<MarketEvent>) -> Vec<SignalEvent>;
 }
 
+#[allow(dead_code)]
 pub struct SimpleMomentum {
     window: usize,
 }

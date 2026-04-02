@@ -1,7 +1,6 @@
 //! Core engine loop: consumes multiplexed market data, runs strategies,
 //! checks risk, and dispatches orders.
 
-use crate::processor::Processor;
 use crate::strategy::Strategy;
 use common::events::*;
 use common::time::{Clock, RealtimeClock, SequenceGenerator, UnixNanos};

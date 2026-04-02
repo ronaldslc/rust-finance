@@ -20,7 +20,7 @@
 // ============================================================
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols,
     text::{Line, Span},
@@ -42,7 +42,7 @@ const FG: Color = Color::Rgb(220, 220, 200);
 
 /// Root render — called every frame from the Tokio draw loop
 pub fn render(f: &mut Frame, state: &AppState) {
-    let area = f.size();
+    let area = f.area();
 
     // ── Top: Index Strip (full width, 1 line) ─────────────────────────────
     let areas = Layout::vertical([
@@ -138,7 +138,7 @@ fn render_index_strip(f: &mut Frame, area: Rect, state: &AppState) {
         ]
     }).collect();
 
-    let strip_text = if let Some(_) = &state.selected_symbol {
+    let strip_text = if state.selected_symbol.is_some() {
         format!(
             "  S&P 500: {:.2}  |  Nasdaq-100: {:.2}  |  Live: E2E {:.1}ms (FIX 4.4)",
             state.sp500_price, state.nasdaq_price, state.latency_ms
@@ -291,7 +291,7 @@ fn render_order_book(f: &mut Frame, area: Rect, state: &AppState) {
     let mid_lines = vec![
         Line::from(Span::styled("Order Book", Style::default().fg(CYAN).add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from(Span::styled(format!("Spread"), Style::default().fg(DIM))),
+        Line::from(Span::styled("Spread", Style::default().fg(DIM))),
         Line::from(Span::styled(format!("{:.2}%", spread_pct), Style::default().fg(FG))),
         Line::from(""),
         Line::from(Span::styled("Mid price", Style::default().fg(DIM))),
@@ -367,7 +367,7 @@ fn render_dexter_panel(f: &mut Frame, area: Rect, state: &AppState) {
     lines.push(Line::from(""));
 
     for risk in &signal.key_risks {
-        lines.push(Line::from(Span::styled(format!("⚠ {}", risk), Style::default().fg(AMBER))));
+        lines.push(Line::from(Span::styled(format!("[!] {}", risk), Style::default().fg(AMBER))));
     }
 
     lines.push(Line::from(""));
@@ -517,7 +517,7 @@ fn render_order_entry(f: &mut Frame, area: Rect, order: &AppState) {
         Span::styled("  Qty ", Style::default().fg(DIM)),
         Span::styled(format!("{}", order.quantity), Style::default().fg(FG)),
         Span::styled("  Price ", Style::default().fg(DIM)),
-        Span::styled(format!("{}", order.price_str), Style::default().fg(FG)),
+        Span::styled(order.price_str.to_string(), Style::default().fg(FG)),
         Span::styled("  LMT / MKT / STP / IOC  ", Style::default().fg(DIM)),
         Span::styled(" BUY ", Style::default().fg(Color::Black).bg(GREEN).add_modifier(Modifier::BOLD)),
         Span::raw("  "),

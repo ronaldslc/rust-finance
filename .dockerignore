@@ -1,0 +1,51 @@
+# Build artifacts
+target/
+
+# VCS & CI
+.git/
+.github/
+.gitignore
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment files (secrets)
+.env
+.env.local
+.env.production
+
+# Documentation (not needed in image)
+*.md
+!README.md
+
+# Test & dev artifacts
+logs/
+grafana/
+infra/
+docs/
+fuzz/
+benches/
+benchmarks/
+assets/
+scripts/
+
+# Windows artifacts
+*.pdb
+*.bat
+*.ps1
+check_env.ps1
+
+# Temp files
+emoji_report.txt
+errors.txt
+
+# Rust tooling config (not needed at runtime)
+clippy.toml
+deny.toml
+cliff.toml
+rust-toolchain.toml
+.cargo/

@@ -78,9 +78,9 @@ impl AlertEngine {
         };
 
         let emoji = match alert.severity {
-            AlertSeverity::Info => "ℹ️",
-            AlertSeverity::Warning => "⚠️",
-            AlertSeverity::Critical => "🚨",
+            AlertSeverity::Info => "[INFO]",
+            AlertSeverity::Warning => "[WARN]",
+            AlertSeverity::Critical => "[CRITICAL]",
         };
 
         let text = format!("{} *{}*\n_{}_\n\n{}", emoji, alert.title, alert.source, alert.message);

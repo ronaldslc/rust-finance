@@ -3,7 +3,12 @@ name = "backtest"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "benchmark_audit"
+path = "src/bin/benchmark_audit.rs"
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }

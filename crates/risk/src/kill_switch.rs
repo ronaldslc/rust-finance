@@ -285,7 +285,7 @@ impl RiskEngine {
     async fn activate_kill_switch(&self, reason: String) -> Result<(), String> {
         let mut ks = self.kill_switch.write().await;
         if !ks.active.load(Ordering::Relaxed) {
-            error!(reason = %reason, "🔴 KILL SWITCH ACTIVATED");
+            error!(reason = %reason, "[!!] KILL SWITCH ACTIVATED");
             ks.active.store(true, Ordering::Relaxed);
             ks.reason = Some(reason.clone());
             ks.activated_at = Some(Instant::now());
@@ -301,7 +301,7 @@ impl RiskEngine {
         ks.active.store(false, Ordering::Relaxed);
         ks.reason = None;
         ks.activated_at = None;
-        info!("🟢 Kill switch reset — trading resumed");
+        info!("[OK] Kill switch reset -- trading resumed");
         let _ = self.event_tx.send(RiskEvent::KillSwitchReset);
     }
 

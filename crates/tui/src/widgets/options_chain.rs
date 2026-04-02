@@ -96,7 +96,7 @@ impl OptionsChainWidget {
         let table = Table::new(rows, widths)
             .header(header)
             .block(table_block)
-            .highlight_style(Style::default().add_modifier(Modifier::REVERSED))
+            .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
             .highlight_symbol(">> ");
 
         frame.render_widget(table, area);

@@ -43,6 +43,7 @@ pub struct AuditTrail {
     seq: u64,
     prev_hash: String,
     writer: BufWriter<File>,
+    #[allow(dead_code)]
     path: PathBuf,
 }
 

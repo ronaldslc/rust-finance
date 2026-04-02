@@ -50,6 +50,36 @@ pub enum AlertSeverity {
 
 use common::models::exchange::{ExchangeInfo, ExchangeStatus, ExchangeName};
 
+// ── Order types for dialogs ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DialogOrderType {
+    Market,
+    Limit,
+    Stop,
+    Ioc,
+}
+
+impl DialogOrderType {
+    pub fn label(&self) -> &'static str {
+        match self {
+            DialogOrderType::Market => "MKT",
+            DialogOrderType::Limit  => "LMT",
+            DialogOrderType::Stop   => "STP",
+            DialogOrderType::Ioc    => "IOC",
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        match self {
+            DialogOrderType::Market => DialogOrderType::Limit,
+            DialogOrderType::Limit  => DialogOrderType::Stop,
+            DialogOrderType::Stop   => DialogOrderType::Ioc,
+            DialogOrderType::Ioc    => DialogOrderType::Market,
+        }
+    }
+}
+
 // ── App Screens ───────────────────────────────────────────────────────────────
 
 pub enum AppScreen {
@@ -75,6 +105,7 @@ pub struct KeyField {
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub struct App {
     pub screen: AppScreen,
     pub should_quit: bool,
@@ -85,43 +116,74 @@ pub struct App {
 
     pub active_symbol: String,
     
-    // Dialogs
+    // ── Dialogs ───────────────────────────────────────────────────────────
     pub show_buy_dialog: bool,
     pub show_sell_dialog: bool,
     pub order_qty_input: String,
     pub order_price_input: String,
+    pub dialog_order_type: DialogOrderType,
 
-    // Chart
+    // ── Chart ─────────────────────────────────────────────────────────────
     pub chart_data: Vec<(f64, f64)>,
     pub volume_data: Vec<(f64, f64)>,
     pub chart_state: ChartState,
     pub chart_stats: ChartStats,
 
-    // Live Data
+    // ── Live Data ─────────────────────────────────────────────────────────
     pub watchlist: Vec<WatchlistItem>,
     pub positions: Vec<PositionEntry>,
     pub order_book: Vec<OrderBookRow>,
     pub news: VecDeque<NewsItem>,
     pub alerts: VecDeque<AlertItem>,
 
-    // Exchanges
+    // ── Exchanges ─────────────────────────────────────────────────────────
     pub exchanges: Vec<ExchangeInfo>,
 
-    // Dexter AI
+    // ── Kill Switch ───────────────────────────────────────────────────────
+    pub kill_switch_active: bool,
+    pub kill_switch_timestamp: Option<String>,
+    pub kill_switch_orders_cancelled: u32,
+    pub kill_switch_positions_closed: u32,
+
+    // ── Dexter AI (enhanced) ──────────────────────────────────────────────
     pub dexter_output: Vec<String>,
     pub dexter_recommendation: Option<String>,
+    pub dexter_loading: bool,
+    pub dexter_confidence: f64,
+    pub dexter_conviction: String,
+    pub dexter_stop_loss_pct: f64,
+    pub dexter_take_profit_pct: f64,
+    pub dexter_kelly_fraction: f64,
+    pub dexter_position_size_pct: f64,
+    pub dexter_rationale: String,
+    pub dexter_regime: String,
+    pub dexter_safety_gate_pass: bool,
+    pub dexter_call_count: u32,
 
-    // Mirofish
+    // ── Mirofish (enhanced) ───────────────────────────────────────────────
     pub mirofish_running: bool,
     pub mirofish_rally_pct: f64,
     pub mirofish_sideways_pct: f64,
     pub mirofish_dip_pct: f64,
+    pub mirofish_agent_count: u32,
+    pub mirofish_sim_time_ms: f64,
+    pub mirofish_order_imbalance: f64,
+    pub mirofish_simulated_vol: f64,
+    pub mirofish_agent_agreement: f64,
+    pub mirofish_bias_detected: bool,
 
-    // Trading
+    // ── Trading ───────────────────────────────────────────────────────────
     pub day_pnl: f64,
     pub available_power: f64,
+    pub orders_sent: u32,
+    pub fills_count: u32,
+    pub rejections_count: u32,
 
-    // Scroll states
+    // ── Session ───────────────────────────────────────────────────────────
+    pub sequence_id: u64,
+    pub session_start: std::time::Instant,
+
+    // ── Scroll states ─────────────────────────────────────────────────────
     pub watchlist_scroll: usize,
     pub news_scroll: usize,
     pub orderbook_scroll: usize,
@@ -134,7 +196,7 @@ impl App {
             should_quit: false,
             connection_status: "Connecting...".to_string(),
             show_help: false,
-            paper_mode: false,
+            paper_mode: true, // Default to paper mode for safety
             active_panel: 0,
             active_symbol: "AAPL".to_string(),
             
@@ -142,6 +204,7 @@ impl App {
             show_sell_dialog: false,
             order_qty_input: String::new(),
             order_price_input: String::new(),
+            dialog_order_type: DialogOrderType::Market,
 
             chart_data: Vec::new(),
             volume_data: Vec::new(),
@@ -164,27 +227,60 @@ impl App {
             alerts: default_alerts(),
             exchanges: default_exchanges(),
 
+            // Kill switch
+            kill_switch_active: false,
+            kill_switch_timestamp: None,
+            kill_switch_orders_cancelled: 0,
+            kill_switch_positions_closed: 0,
+
+            // Dexter AI (enhanced)
             dexter_output: vec![
-                "Revenue impact estimates - $44 mi in".to_string(),
+                "Revenue impact estimates — $44M in".to_string(),
                 "showing revenue cooperates. +35% revenue".to_string(),
-                "margin insert scanue, moast L, 42% on".to_string(),
+                "margin insert scenario, most L, 42% on".to_string(),
                 "margin comparison 50% ≈ 34% on margin.".to_string(),
                 "".to_string(),
                 "Key valuation multiples:".to_string(),
-                "- P/E: 10.53".to_string(),
-                "- P/S: 2.98".to_string(),
-                "- EV/EBITDA: 2.99".to_string(),
-                "- DCF fair value range: $3.30 - $7.6B".to_string(),
+                "  P/E: 10.53".to_string(),
+                "  P/S: 2.98".to_string(),
+                "  EV/EBITDA: 2.99".to_string(),
+                "  DCF fair value range: $3.30 — $7.6B".to_string(),
             ],
             dexter_recommendation: Some("BUY".to_string()),
+            dexter_loading: false,
+            dexter_confidence: 0.74,
+            dexter_conviction: "HIGH".to_string(),
+            dexter_stop_loss_pct: 3.2,
+            dexter_take_profit_pct: 8.5,
+            dexter_kelly_fraction: 0.042,
+            dexter_position_size_pct: 4.2,
+            dexter_rationale: "Strong institutional accumulation pattern with RSI 62.4 confirming momentum. Swarm consensus at 77% rally probability with high conviction.".to_string(),
+            dexter_regime: "Trending".to_string(),
+            dexter_safety_gate_pass: true,
+            dexter_call_count: 0,
 
+            // Mirofish (enhanced) — fixed to sum to 100%
             mirofish_running: true,
-            mirofish_rally_pct: 77.0,
-            mirofish_sideways_pct: 30.0,
-            mirofish_dip_pct: 0.0,
+            mirofish_rally_pct: 42.0,
+            mirofish_sideways_pct: 35.0,
+            mirofish_dip_pct: 23.0,
+            mirofish_agent_count: 5_000,
+            mirofish_sim_time_ms: 847.3,
+            mirofish_order_imbalance: 0.23,
+            mirofish_simulated_vol: 0.019,
+            mirofish_agent_agreement: 72.0,
+            mirofish_bias_detected: false,
 
+            // Trading
             day_pnl: 10.90,
             available_power: 1729.8,
+            orders_sent: 15,
+            fills_count: 12,
+            rejections_count: 0,
+
+            // Session
+            sequence_id: 0,
+            session_start: std::time::Instant::now(),
 
             watchlist_scroll: 0,
             news_scroll: 0,
@@ -250,10 +346,27 @@ impl App {
         self.active_panel = if self.active_panel == 0 { 5 } else { self.active_panel - 1 };
     }
 
+    // ── Kill Switch ───────────────────────────────────────────────────────────
+
+    pub fn activate_kill_switch(&mut self) {
+        self.kill_switch_active = true;
+        let now = chrono::Local::now();
+        self.kill_switch_timestamp = Some(now.format("%Y-%m-%d %H:%M:%S%.3f").to_string());
+        self.kill_switch_orders_cancelled = self.orders_sent;
+        self.kill_switch_positions_closed = self.positions.len() as u32;
+        self.sequence_id += 1;
+        self.push_alert_severity("!!! KILL SWITCH ACTIVATED -- ALL TRADING HALTED", AlertSeverity::Critical);
+    }
+
     // ── Trading ───────────────────────────────────────────────────────────────
 
     pub fn push_alert(&mut self, text: &str) {
         self.alerts.push_front(AlertItem { text: text.to_string(), severity: AlertSeverity::Info });
+        if self.alerts.len() > 20 { self.alerts.pop_back(); }
+    }
+
+    pub fn push_alert_severity(&mut self, text: &str, severity: AlertSeverity) {
+        self.alerts.push_front(AlertItem { text: text.to_string(), severity });
         if self.alerts.len() > 20 { self.alerts.pop_back(); }
     }
 
@@ -262,6 +375,7 @@ impl App {
         self.show_sell_dialog = false;
         self.order_qty_input.clear();
         self.order_price_input.clear();
+        self.dialog_order_type = DialogOrderType::Market;
         self.push_alert("Opening BUY dialog pane...");
     }
 
@@ -270,7 +384,12 @@ impl App {
         self.show_buy_dialog = false;
         self.order_qty_input.clear();
         self.order_price_input.clear();
+        self.dialog_order_type = DialogOrderType::Market;
         self.push_alert("Opening SELL dialog pane...");
+    }
+
+    pub fn cycle_order_type(&mut self) {
+        self.dialog_order_type = self.dialog_order_type.next();
     }
 
     pub fn cancel_selected(&mut self) {
@@ -278,9 +397,10 @@ impl App {
     }
 
     pub fn cancel_all(&mut self) {
-        self.push_alert("WARNING: All pending orders cancelled.");
+        self.push_alert_severity("WARNING: All pending orders cancelled.", AlertSeverity::Warning);
     }
 
+    #[allow(dead_code)]
     pub fn halve_position(&mut self) {
         self.push_alert("Position halved. Routing market sell for 50%.");
     }
@@ -290,10 +410,15 @@ impl App {
     }
 
     pub fn confirm_order(&mut self) {
+        self.sequence_id += 1;
         if self.show_buy_dialog {
-             self.push_alert(&format!("BUY Order submitted for {} at {} qty", self.active_symbol, self.order_qty_input));
+             self.orders_sent += 1;
+             self.push_alert(&format!("BUY {} submitted: {} qty @ {} [seq:{}]", 
+                 self.active_symbol, self.order_qty_input, self.dialog_order_type.label(), self.sequence_id));
         } else if self.show_sell_dialog {
-             self.push_alert(&format!("SELL Order submitted for {} at {} qty", self.active_symbol, self.order_qty_input));
+             self.orders_sent += 1;
+             self.push_alert(&format!("SELL {} submitted: {} qty @ {} [seq:{}]", 
+                 self.active_symbol, self.order_qty_input, self.dialog_order_type.label(), self.sequence_id));
         } else {
              self.push_alert("Order submitted to execution engine.");
         }
@@ -304,31 +429,62 @@ impl App {
     pub fn dismiss_dialog(&mut self) {
         self.show_buy_dialog = false;
         self.show_sell_dialog = false;
-        self.push_alert("Dialog dismissed.");
     }
 
     // ── AI ─────────────────────────────────────────────────────────────────────
 
     pub fn trigger_dexter(&mut self) {
-        self.push_alert("Dexter Analysis requested...");
+        self.dexter_call_count += 1;
+        self.dexter_loading = true;
         self.dexter_output = vec!["Analyzing market conditions...".to_string()];
         self.dexter_recommendation = None;
+        self.push_alert(&format!("Dexter Analysis #{} requested for {}...", self.dexter_call_count, self.active_symbol));
+        
+        // Simulate completion after a brief moment (in real app, async task would update)
+        self.dexter_loading = false;
+        self.dexter_output = vec![
+            format!("Revenue impact estimates — $44M in"),
+            format!("showing revenue cooperates. +35% revenue"),
+            format!("margin insert scenario, most L, 42% on"),
+            format!("margin comparison 50% ≈ 34% on margin."),
+            "".to_string(),
+            "Key valuation multiples:".to_string(),
+            format!("  P/E: 10.53  |  P/S: 2.98"),
+            format!("  EV/EBITDA: 2.99"),
+            format!("  DCF fair value: $3.30 — $7.6B"),
+        ];
+        self.dexter_recommendation = Some("BUY".to_string());
+        self.dexter_confidence = 0.74;
+        self.dexter_conviction = "HIGH".to_string();
+        self.dexter_safety_gate_pass = true;
     }
 
     pub fn trigger_mirofish(&mut self) {
-        self.push_alert("Mirofish 5,000-agent simulation started.");
+        self.push_alert(&format!("Mirofish {}-agent simulation started.", self.mirofish_agent_count));
         self.mirofish_running = true;
-        self.mirofish_rally_pct = 20.0;
-        self.mirofish_sideways_pct = 70.0;
-        self.mirofish_dip_pct = 10.0;
+        // Simulate realistic scenario probabilities summing to 100%
+        self.mirofish_rally_pct = 42.0;
+        self.mirofish_sideways_pct = 35.0;
+        self.mirofish_dip_pct = 23.0;
+        self.mirofish_agent_agreement = 72.0;
+        self.mirofish_bias_detected = false;
+        self.mirofish_sim_time_ms = 847.3;
     }
 
     pub fn cycle_confidence(&mut self) {
-        self.push_alert("AI Confidence threshold cycled: Strong 80%.");
+        let current = (self.dexter_confidence * 100.0) as u32;
+        let next = match current {
+            0..=59 => 60,
+            60..=74 => 75,
+            75..=89 => 90,
+            _ => 60,
+        };
+        self.dexter_confidence = next as f64 / 100.0;
+        self.push_alert(&format!("AI Confidence threshold cycled: {}%", next));
     }
 
     pub fn toggle_auto_trade(&mut self) {
-        self.push_alert("Auto-trade mode TOGGLED.");
+        self.push_alert_severity("Auto-trade mode TOGGLED. [!] Confirm with Ctrl+A again.", AlertSeverity::Warning);
     }
 
     // ── Data ──────────────────────────────────────────────────────────────────
@@ -341,6 +497,7 @@ impl App {
         self.push_alert("Backtest engine warming up...");
     }
 
+    #[allow(dead_code)]
     pub fn toggle_data_source(&mut self) {
         self.push_alert("Switched data source (Mock <-> Live)");
     }
@@ -349,23 +506,41 @@ impl App {
         self.push_alert("Refreshing portfolio via broker REST API...");
     }
 
+    // ── Session helpers ───────────────────────────────────────────────────────
+
+    pub fn session_uptime(&self) -> String {
+        let elapsed = self.session_start.elapsed();
+        let secs = elapsed.as_secs();
+        let h = secs / 3600;
+        let m = (secs % 3600) / 60;
+        let s = secs % 60;
+        format!("{:02}:{:02}:{:02}", h, m, s)
+    }
+
+    pub fn fill_ratio_str(&self) -> String {
+        if self.fills_count + self.rejections_count == 0 {
+            "—".to_string()
+        } else {
+            format!("{}/{}", self.fills_count, self.rejections_count)
+        }
+    }
+
     pub fn update_from_event(&mut self, event: common::events::BotEvent) {
         use common::events::BotEvent;
+        self.sequence_id += 1;
+        
         match event {
             BotEvent::MarketEvent { symbol, price, volume, event_type, .. } => {
-                // Update watchlist
                 if let Some(item) = self.watchlist.iter_mut().find(|w| w.symbol == symbol) {
                     item.price = price;
-                    // Mock change pct for demo
                     item.change_pct = (price - 100.0) / 100.0;
                 }
                 
-                // Update chart if it's the active symbol
                 if symbol == self.active_symbol && event_type == "trade" {
                     let next_x = self.chart_data.last().map(|(x, _)| *x + 1.0).unwrap_or(0.0);
                     self.chart_data.push((next_x, price));
                     if self.chart_data.len() > 2000 {
-                        self.chart_data.remove(0); // rolling window
+                        self.chart_data.remove(0);
                     }
                     
                     if let Some(vol) = volume {
@@ -373,10 +548,9 @@ impl App {
                         if self.volume_data.len() > 2000 {
                             self.volume_data.remove(0);
                         }
-                        self.chart_stats.volume += vol; // running daily volume total
+                        self.chart_stats.volume += vol;
                     }
                     
-                    // Dynamically update stats
                     self.chart_stats.last_price = price;
                     if price > self.chart_stats.high_price || self.chart_stats.high_price == 0.0 {
                         self.chart_stats.high_price = price;
@@ -414,10 +588,6 @@ impl App {
             }
             BotEvent::QuoteEvent { symbol, bid_price, bid_size, ask_price, ask_size, .. } => {
                 if symbol == self.active_symbol {
-                    // We only get top-of-book from basic endpoints usually, 
-                    // but for a dynamic order book simulation, let's treat it as an order book update.
-                    
-                    // Add/update Ask side (Sort Ascending)
                     if ask_size > 0 {
                         if !self.order_book.iter().any(|r| r.ask_price == ask_price) {
                             self.order_book.push(OrderBookRow {
@@ -429,7 +599,6 @@ impl App {
                         }
                     }
                     
-                    // Add/update Bid side (Sort Descending)
                     if bid_size > 0 {
                         if !self.order_book.iter().any(|r| r.bid_price == bid_price) {
                              self.order_book.push(OrderBookRow {
@@ -441,16 +610,9 @@ impl App {
                         }
                     }
                     
-                    // Sort order book: We want lowest asks at top, highest bids at top
-                    // A proper L2 book splits bids and asks into two lists, but since the TUI 
-                    // merges them into one row-based table, we just sort by price proximity to mid
-                    let _mid_price = (ask_price + bid_price) / 2.0;
-                    
-                    // Best asks ascending
                     let mut asks: Vec<_> = self.order_book.iter().filter(|r| r.ask_price > 0.0).map(|r| (r.ask_price, r.ask_size)).collect();
                     asks.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
                     
-                    // Best bids descending
                     let mut bids: Vec<_> = self.order_book.iter().filter(|r| r.bid_price > 0.0).map(|r| (r.bid_price, r.bid_size)).collect();
                     bids.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
                     
@@ -464,7 +626,7 @@ impl App {
                         let (ap, asz) = asks.get(i).copied().unwrap_or((0.0, 0));
                         let (bp, bsz) = bids.get(i).copied().unwrap_or((0.0, 0));
                         
-                        ask_cumulative += (asz as f64 * ap) / 1000.0; // In thousands
+                        ask_cumulative += (asz as f64 * ap) / 1000.0;
                         bid_cumulative += (bsz as f64 * bp) / 1000.0;
                         
                         self.order_book.push(OrderBookRow {
@@ -484,7 +646,7 @@ impl App {
                     "CRYPTO" => ExchangeName::CRYPTO,
                     "NSE" => ExchangeName::NSE,
                     "BSE" => ExchangeName::BSE,
-                    _ => return, // Unknown exchange
+                    _ => return,
                 };
 
                 let parsed_status = match status.as_str() {
@@ -565,14 +727,14 @@ fn default_news() -> VecDeque<NewsItem> {
 
 fn default_alerts() -> VecDeque<AlertItem> {
     let items = vec![
-        AlertItem { text: "EV subsidy catalyst detected - TSLA".into(), severity: AlertSeverity::Info },
-        AlertItem { text: "Earnings beat expected - AAPL Q4 +12%".into(), severity: AlertSeverity::Info },
-        AlertItem { text: "Unusual options activity - NVDA $350C".into(), severity: AlertSeverity::Warning },
-        AlertItem { text: "Overbought RSI 78.4 - NVDA".into(), severity: AlertSeverity::Warning },
-        AlertItem { text: "Volume spike 3.2x avg - AMD".into(), severity: AlertSeverity::Info },
-        AlertItem { text: "Support level test - META $50.00".into(), severity: AlertSeverity::Critical },
-        AlertItem { text: "Bullish MACD crossover - GOOG".into(), severity: AlertSeverity::Info },
-        AlertItem { text: "Institutional accumulation - MSFT".into(), severity: AlertSeverity::Info },
+        AlertItem { text: "EV subsidy catalyst detected — TSLA".into(), severity: AlertSeverity::Info },
+        AlertItem { text: "Earnings beat expected — AAPL Q4 +12%".into(), severity: AlertSeverity::Info },
+        AlertItem { text: "Unusual options activity — NVDA $350C".into(), severity: AlertSeverity::Warning },
+        AlertItem { text: "Overbought RSI 78.4 — NVDA".into(), severity: AlertSeverity::Warning },
+        AlertItem { text: "Volume spike 3.2x avg — AMD".into(), severity: AlertSeverity::Info },
+        AlertItem { text: "Support level test — META $50.00".into(), severity: AlertSeverity::Critical },
+        AlertItem { text: "Bullish MACD crossover — GOOG".into(), severity: AlertSeverity::Info },
+        AlertItem { text: "Institutional accumulation — MSFT".into(), severity: AlertSeverity::Info },
     ];
     VecDeque::from(items)
 }
@@ -587,3 +749,4 @@ fn default_exchanges() -> Vec<ExchangeInfo> {
         ExchangeInfo { name: ExchangeName::CRYPTO, status: ExchangeStatus::Connected, latency_ms: 45.1, last_heartbeat: None },
     ]
 }
+

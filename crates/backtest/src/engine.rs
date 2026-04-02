@@ -297,7 +297,7 @@ impl BacktestEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::strategy::{SimpleMovingAverageCrossover, Strategy};
+    use crate::strategy::SimpleMovingAverageCrossover;
 
     fn make_trending_bars(n: usize, trend: f64) -> Vec<Bar> {
         (0..n).map(|i| {

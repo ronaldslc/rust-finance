@@ -28,6 +28,7 @@ pub struct TargetActivity {
     pub timestamp: Option<String>,
 }
 
+#[allow(dead_code)]
 pub struct CopyTrader {
     data_api_url: String,
     http: Client,

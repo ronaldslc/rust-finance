@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 use std::{
     io,
-    time::{Duration},
+    time::Duration,
 };
 use crossterm::{
     event::{self, Event},
@@ -10,23 +10,30 @@ use crossterm::{
 };
 use ratatui::{
     prelude::*,
-    widgets::{*},
+    widgets::*,
     text::Line,
 };
 use tokio::net::TcpStream;
 use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 
-// Custom Colors matching the image
+// ── Color Palette (production-grade dark theme) ──────────────────────────────
 const BG: Color = Color::Rgb(10, 12, 15);
+const BG_ELEVATED: Color = Color::Rgb(18, 22, 28);
 const BORDER: Color = Color::Rgb(30, 37, 48);
+const BORDER_ACTIVE: Color = Color::Rgb(59, 130, 246);
 const TEXT_PRIMARY: Color = Color::Rgb(226, 232, 240);
 const TEXT_SECONDARY: Color = Color::Rgb(148, 163, 184);
+const TEXT_DIM: Color = Color::Rgb(80, 90, 100);
 const GREEN: Color = Color::Rgb(74, 222, 128);
 const RED: Color = Color::Rgb(248, 113, 113);
+const RED_KILL: Color = Color::Rgb(180, 0, 0);
 const ORANGE: Color = Color::Rgb(249, 115, 22);
 const BLUE: Color = Color::Rgb(96, 165, 250);
 const PURPLE: Color = Color::Rgb(167, 139, 250);
+const CYAN: Color = Color::Rgb(0, 210, 220);
+const AMBER: Color = Color::Rgb(240, 180, 0);
+const YELLOW: Color = Color::Rgb(250, 204, 21);
 
 mod app;
 mod event_handler;
@@ -47,10 +54,8 @@ async fn main() -> anyhow::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Try loading existing .env
     let _ = dotenvy::dotenv();
 
-    // Determine if setup is needed
     let needs_setup = std::env::var("FINNHUB_API_KEY").is_err()
         || std::env::var("ALPACA_API_KEY").is_err()
         || std::env::var("ALPACA_SECRET_KEY").is_err();
@@ -69,7 +74,6 @@ async fn main() -> anyhow::Result<()> {
     let (tx_status, mut rx_status) = mpsc::channel::<String>(100);
     let (tx_event, mut rx_event) = mpsc::channel::<common::events::BotEvent>(1000);
     
-    // Clone channels for the async task
     let tx_status_clone = tx_status.clone();
     
     tokio::spawn(async move {
@@ -82,17 +86,16 @@ async fn main() -> anyhow::Result<()> {
                     
                     loop {
                         if reader.read_exact(&mut length_buf).await.is_err() {
-                            break; // EOF or Error
+                            break;
                         }
                         let len = u32::from_le_bytes(length_buf) as usize;
-                        if len > 1024 * 1024 { break; } // Safety limit
+                        if len > 1024 * 1024 { break; }
                         
                         let mut buf = vec![0u8; len];
                         if reader.read_exact(&mut buf).await.is_err() {
                             break;
                         }
                         
-                        // Parse event using Postcard
                         if let Ok(event) = postcard::from_bytes::<common::events::BotEvent>(&buf) {
                             let _ = tx_event.send(event).await;
                         }
@@ -108,7 +111,6 @@ async fn main() -> anyhow::Result<()> {
     });
 
     loop {
-        // Non-blocking UI update from network thread
         while let Ok(msg) = rx_status.try_recv() {
             app.connection_status = msg;
         }
@@ -123,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
             }
         })?;
 
-        if crossterm::event::poll(Duration::from_millis(50))? {
+        if crossterm::event::poll(Duration::from_millis(16))? {  // ~60 FPS
             match event::read()? {
                 Event::Key(key) => {
                     match &mut app.screen {
@@ -175,6 +177,10 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// RENDERING
+// ═══════════════════════════════════════════════════════════════════════════════
+
 fn ui(f: &mut Frame, app: &App) {
     let main_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -183,12 +189,13 @@ fn ui(f: &mut Frame, app: &App) {
             Constraint::Min(0),    // Main Content
             Constraint::Length(1), // Bottom Bar
         ])
-        .split(f.size());
+        .split(f.area());
 
     draw_top_bar(f, main_layout[0], app);
     draw_main_content(f, main_layout[1], app);
-    draw_bottom_bar(f, main_layout[2]);
+    draw_bottom_bar(f, main_layout[2], app);
 
+    // ── Overlays (Z-ordered) ──────────────────────────────────────────────
     if app.show_help {
         crate::widgets::help_overlay::render_help_overlay(f);
     }
@@ -196,37 +203,199 @@ fn ui(f: &mut Frame, app: &App) {
     if app.show_buy_dialog || app.show_sell_dialog {
         draw_dialog(f, app);
     }
+
+    if app.kill_switch_active {
+        draw_kill_switch_overlay(f, app);
+    }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// KILL SWITCH OVERLAY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+fn draw_kill_switch_overlay(f: &mut Frame, app: &App) {
+    let area = f.area();
+    f.render_widget(Clear, area);
+    
+    // Full-screen red background
+    let bg_block = Block::default().style(Style::default().bg(RED_KILL));
+    f.render_widget(bg_block, area);
+
+    let center = centered_rect(70, 60, area);
+    f.render_widget(Clear, center);
+
+    let inner_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(RED).add_modifier(Modifier::BOLD))
+        .border_type(BorderType::Double)
+        .style(Style::default().bg(Color::Rgb(30, 0, 0)));
+    
+    let inner = inner_block.inner(center);
+    f.render_widget(inner_block, center);
+
+    let timestamp = app.kill_switch_timestamp.as_deref().unwrap_or("UNKNOWN");
+
+    let text = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  ██╗  ██╗██╗██╗     ██╗     ", Style::default().fg(RED).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(vec![
+            Span::styled("  ██║ ██╔╝██║██║     ██║     ", Style::default().fg(RED).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(vec![
+            Span::styled("  █████╔╝ ██║██║     ██║     ", Style::default().fg(RED).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(vec![
+            Span::styled("  ██╔═██╗ ██║██║     ██║     ", Style::default().fg(RED).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(vec![
+            Span::styled("  ██║  ██╗██║███████╗███████╗ ", Style::default().fg(RED).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(vec![
+            Span::styled("  ╚═╝  ╚═╝╚═╝╚══════╝╚══════╝", Style::default().fg(RED).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  !!!  EMERGENCY HALT -- ALL TRADING SUSPENDED  !!!  ", 
+                Style::default().fg(YELLOW).add_modifier(Modifier::BOLD | Modifier::SLOW_BLINK)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Timestamp:       ", Style::default().fg(TEXT_DIM)),
+            Span::styled(timestamp, Style::default().fg(TEXT_PRIMARY)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Sequence ID:     ", Style::default().fg(TEXT_DIM)),
+            Span::styled(format!("{}", app.sequence_id), Style::default().fg(TEXT_PRIMARY)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Orders Cancelled:", Style::default().fg(TEXT_DIM)),
+            Span::styled(format!(" {} pending orders", app.kill_switch_orders_cancelled), Style::default().fg(RED)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Positions:       ", Style::default().fg(TEXT_DIM)),
+            Span::styled(format!(" {} positions flagged", app.kill_switch_positions_closed), Style::default().fg(ORANGE)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Mode:            ", Style::default().fg(TEXT_DIM)),
+            Span::styled(if app.paper_mode { " PAPER (no real orders)" } else { " >> LIVE" }, 
+                Style::default().fg(if app.paper_mode { BLUE } else { RED })),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Gateway:         ", Style::default().fg(TEXT_DIM)),
+            Span::styled(" HALTED ", Style::default().fg(Color::Black).bg(RED).add_modifier(Modifier::BOLD)),
+            Span::raw("  "),
+            Span::styled(" ALL VENUES DISCONNECTED ", Style::default().fg(Color::Black).bg(ORANGE).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(""),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  [K] Resume Trading    [Q] Quit Application    [Esc] Dismiss", 
+                Style::default().fg(TEXT_SECONDARY)),
+        ]),
+    ];
+
+    f.render_widget(
+        Paragraph::new(text).style(Style::default().bg(Color::Rgb(30, 0, 0))),
+        inner,
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENHANCED BUY/SELL DIALOG
+// ═══════════════════════════════════════════════════════════════════════════════
+
 fn draw_dialog(f: &mut Frame, app: &App) {
-    let title = if app.show_buy_dialog { "BUY ORDER" } else { "SELL ORDER" };
-    let border_color = if app.show_buy_dialog { GREEN } else { RED };
+    let is_buy = app.show_buy_dialog;
+    let title = if is_buy { " BUY ORDER " } else { " SELL ORDER " };
+    let border_color = if is_buy { GREEN } else { RED };
     
-    // Create a 40x10 popup in the center of the screen
-    let area = centered_rect(40, 15, f.size());
-    
-    f.render_widget(Clear, area); // Clear background
+    let area = centered_rect(45, 45, f.area());
+    f.render_widget(Clear, area);
     
     let block = Block::default()
         .title(title)
+        .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color))
-        .style(Style::default().bg(BG));
+        .border_type(BorderType::Rounded)
+        .style(Style::default().bg(BG_ELEVATED));
         
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let mode_text = if app.paper_mode { "PAPER" } else { ">> LIVE" };
+    let mode_color = if app.paper_mode { BLUE } else { RED };
+
+    // Build order type selector
+    let ot = app.dialog_order_type;
+    let type_spans: Vec<Span> = [
+        app::DialogOrderType::Market,
+        app::DialogOrderType::Limit,
+        app::DialogOrderType::Stop,
+        app::DialogOrderType::Ioc,
+    ].iter().map(|t| {
+        if *t == ot {
+            Span::styled(format!(" {} ", t.label()), Style::default().fg(Color::Black).bg(border_color).add_modifier(Modifier::BOLD))
+        } else {
+            Span::styled(format!(" {} ", t.label()), Style::default().fg(TEXT_DIM))
+        }
+    }).collect();
+
     let text = vec![
-        Line::from(vec![Span::styled(format!("Symbol:   {}", app.active_symbol), Style::default().add_modifier(Modifier::BOLD))]),
+        Line::from(vec![
+            Span::styled("  Mode: ", Style::default().fg(TEXT_DIM)),
+            Span::styled(mode_text, Style::default().fg(mode_color).add_modifier(Modifier::BOLD)),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::raw("Quantity: "), Span::styled(&app.order_qty_input, Style::default().fg(TEXT_PRIMARY).bg(BORDER)), Span::raw("█")]),
+        Line::from(vec![
+            Span::styled("  Symbol:   ", Style::default().fg(TEXT_SECONDARY)),
+            Span::styled(&app.active_symbol, Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::BOLD)),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::raw("Type:     MARKET")]), // Hardcoded for simplified input right now
+        Line::from(vec![
+            Span::styled("  Quantity: ", Style::default().fg(TEXT_SECONDARY)),
+            Span::styled(&app.order_qty_input, Style::default().fg(TEXT_PRIMARY).bg(BORDER)),
+            Span::styled("█", Style::default().fg(border_color).add_modifier(Modifier::SLOW_BLINK)),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::styled("[ENTER] Confirm   [ESC] Cancel", Style::default().fg(TEXT_SECONDARY))]),
+        Line::from({
+            let mut spans = vec![Span::styled("  Type:     ", Style::default().fg(TEXT_SECONDARY))];
+            spans.extend(type_spans);
+            spans
+        }),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  ─── AI SUGGESTION ───", Style::default().fg(CYAN)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Dexter says: ", Style::default().fg(TEXT_DIM)),
+            Span::styled(
+                app.dexter_recommendation.as_deref().unwrap_or("—"),
+                Style::default().fg(if app.dexter_recommendation.as_deref() == Some("BUY") { GREEN } else { RED }).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(format!("  conf: {:.0}%", app.dexter_confidence * 100.0), Style::default().fg(TEXT_DIM)),
+        ]),
+        Line::from(vec![
+            Span::styled(format!("  SL: {:.1}%  TP: {:.1}%  Size: {:.1}%", 
+                app.dexter_stop_loss_pct, app.dexter_take_profit_pct, app.dexter_position_size_pct),
+                Style::default().fg(TEXT_DIM)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  [Enter] CONFIRM   [Esc] CANCEL   [Tab] Type", Style::default().fg(TEXT_SECONDARY)),
+        ]),
     ];
     
-    f.render_widget(Paragraph::new(text).block(block).alignment(Alignment::Center), area);
+    f.render_widget(Paragraph::new(text), inner);
 }
 
-// Helper function to center a rect
+// ═══════════════════════════════════════════════════════════════════════════════
+// Helper
+// ═══════════════════════════════════════════════════════════════════════════════
+
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -257,31 +426,74 @@ fn block_with_title<'a>(title: &'a str) -> Block<'a> {
         .style(Style::default().bg(BG))
 }
 
+fn active_block_with_title<'a>(title: &'a str, is_active: bool) -> Block<'a> {
+    Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(if is_active { BORDER_ACTIVE } else { BORDER }))
+        .border_type(if is_active { BorderType::Rounded } else { BorderType::Plain })
+        .title(title)
+        .title_style(Style::default().fg(if is_active { BLUE } else { TEXT_SECONDARY }))
+        .style(Style::default().bg(BG))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOP BAR — Live clock + exchange status + latency
+// ═══════════════════════════════════════════════════════════════════════════════
+
 fn draw_top_bar(f: &mut Frame, area: Rect, app: &App) {
+    let now = chrono::Local::now();
+    let clock = now.format("%H:%M:%S").to_string();
+    let date = now.format("%b %d").to_string();
+
     let mut spans = vec![
-        Span::styled(" RUST TERMINAL   ", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
+        Span::styled(" RUSTFORGE ", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
+        Span::styled("│ ", Style::default().fg(BORDER)),
     ];
 
+    // Exchange status indicators
     for ex in &app.exchanges {
         let (color, icon) = match ex.status {
             ExchangeStatus::Connected => (GREEN, "●"),
             ExchangeStatus::Degraded => (ORANGE, "◐"),
             ExchangeStatus::Disconnected => (RED, "○"),
-            ExchangeStatus::Disabled => (TEXT_SECONDARY, "○"),
+            ExchangeStatus::Disabled => (TEXT_DIM, "○"),
         };
-        spans.push(Span::styled(format!("{} ", ex.name), Style::default().fg(color)));
-        spans.push(Span::raw(format!("{}  ", icon)));
+        spans.push(Span::styled(format!("{}", ex.name), Style::default().fg(color)));
+        spans.push(Span::styled(format!("{} ", icon), Style::default().fg(color)));
     }
 
-    spans.push(Span::raw("                                        "));
-    spans.push(Span::styled("● ", Style::default().fg(Color::Cyan)));
-    spans.push(Span::styled(
-        format!(" Live: E2E: 1.8ms | Status: {} | 11 2:30 EST", app.connection_status),
-        Style::default().fg(TEXT_SECONDARY)
-    ));
+    spans.push(Span::styled("│ ", Style::default().fg(BORDER)));
+
+    // Paper/Live mode
+    if app.paper_mode {
+        spans.push(Span::styled("PAPER ", Style::default().fg(BLUE).add_modifier(Modifier::BOLD)));
+    } else {
+        spans.push(Span::styled(">>LIVE ", Style::default().fg(RED).add_modifier(Modifier::BOLD)));
+    }
+
+    spans.push(Span::styled("│ ", Style::default().fg(BORDER)));
+
+    // Live metrics
+    spans.push(Span::styled("E2E: ", Style::default().fg(TEXT_DIM)));
+    spans.push(Span::styled("1.8ms ", Style::default().fg(GREEN)));
+    spans.push(Span::styled("│ FIX 4.4 │ ", Style::default().fg(BORDER)));
+    spans.push(Span::styled(&app.connection_status, Style::default().fg(TEXT_SECONDARY)));
+
+    // Right-aligned clock
+    let status_len: usize = spans.iter().map(|s| s.content.len()).sum();
+    let clock_str = format!(" {} {} ", date, clock);
+    let padding = area.width as usize - status_len.min(area.width as usize) - clock_str.len();
+    if padding > 0 {
+        spans.push(Span::raw(" ".repeat(padding)));
+    }
+    spans.push(Span::styled(clock_str, Style::default().fg(CYAN)));
 
     f.render_widget(Paragraph::new(Line::from(spans)).style(Style::default().bg(BG)), area);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN CONTENT — 3 columns
+// ═══════════════════════════════════════════════════════════════════════════════
 
 fn draw_main_content(f: &mut Frame, area: Rect, app: &App) {
     let cols = Layout::default()
@@ -297,6 +509,8 @@ fn draw_main_content(f: &mut Frame, area: Rect, app: &App) {
     draw_center_col(f, cols[1], app);
     draw_right_col(f, cols[2], app);
 }
+
+// ── LEFT COLUMN ──────────────────────────────────────────────────────────────
 
 fn draw_left_col(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
@@ -317,8 +531,8 @@ fn draw_watchlist(f: &mut Frame, area: Rect, app: &App) {
         let sign = if item.change_pct >= 0.0 { "+" } else { "" };
         Row::new(vec![
             Cell::from(Line::from(vec![
-                Span::styled(item.symbol.clone(), Style::default().fg(TEXT_PRIMARY)),
-                Span::styled(format!("\n{}", item.name), Style::default().fg(TEXT_SECONDARY)),
+                Span::styled(item.symbol.clone(), Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("\n{}", item.name), Style::default().fg(TEXT_DIM)),
             ])),
             Cell::from(Span::styled(format!("{:.2}", item.price), Style::default().fg(TEXT_PRIMARY))),
             Cell::from(Span::styled(format!("{}{:.2}%", sign, item.change_pct), Style::default().fg(color))),
@@ -332,12 +546,9 @@ fn draw_watchlist(f: &mut Frame, area: Rect, app: &App) {
     ];
 
     let table = Table::new(rows, widths)
-        .header(Row::new(vec!["Symbol", "Price", "Change"]).style(Style::default().fg(TEXT_SECONDARY)))
-        .block(block_with_title("Watchlist"));
+        .header(Row::new(vec!["Symbol", "Price", "Change"]).style(Style::default().fg(TEXT_DIM)))
+        .block(active_block_with_title(" Watchlist ", app.active_panel == 0));
 
-    // Quick hack for scrolling - ratatui Table needs TableState for true scrolling,
-    // so we'd normally pass a mutable reference. For now, we rely on the App state.
-    
     f.render_widget(table, area);
 }
 
@@ -354,24 +565,25 @@ fn draw_dexter_alerts(f: &mut Frame, area: Rect, app: &App) {
         ]))
     }).collect();
 
-    let list = List::new(items).block(block_with_title("Dexter Alerts"));
+    let list = List::new(items).block(active_block_with_title(" Dexter Alerts ", app.active_panel == 1));
     f.render_widget(list, area);
 }
+
+// ── CENTER COLUMN ────────────────────────────────────────────────────────────
 
 fn draw_center_col(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Strip
-            Constraint::Percentage(50), // Chart // Dynamically takes half instead of fixed 13
-            Constraint::Percentage(25),     // Order Book
-            Constraint::Percentage(17),  // Dexter & Mirofish
-            Constraint::Percentage(5),  // Order Entry
+            Constraint::Length(3),  // Index Strip
+            Constraint::Percentage(45), // Chart
+            Constraint::Percentage(25), // Order Book
+            Constraint::Percentage(25), // Dexter & Mirofish
+            Constraint::Length(3),  // Order Entry
         ])
         .split(area);
 
     draw_index_strip(f, chunks[0]);
-    // Delegate to the new widget module
     render_chart(f, chunks[1], &app.chart_data, &app.volume_data, &app.chart_state, &app.chart_stats);
     draw_order_book(f, chunks[2], app);
 
@@ -382,19 +594,19 @@ fn draw_center_col(f: &mut Frame, area: Rect, app: &App) {
     
     draw_dexter_analyst(f, bottom_split[0], app);
     draw_mirofish_sim(f, bottom_split[1], app);
-    draw_order_entry(f, chunks[4]);
+    draw_order_entry(f, chunks[4], app);
 }
 
 fn draw_index_strip(f: &mut Frame, area: Rect) {
     let p = Paragraph::new(Line::from(vec![
-        Span::styled("S&P 500 ", Style::default().fg(RED)), Span::raw(" | "),
-        Span::styled("Nasdaq-100 ", Style::default().fg(GREEN)), Span::raw(" | "),
-        Span::styled("Dow Jones ", Style::default().fg(GREEN)), Span::raw(" | "),
-        Span::styled("CRYPTO:/CBOP ", Style::default().fg(TEXT_PRIMARY)), Span::raw(" | "),
-        Span::styled("Major Intra ", Style::default().fg(ORANGE)), Span::raw(" | "),
-        Span::styled("LMIIc (UD) ", Style::default().fg(TEXT_SECONDARY)), Span::raw(" | "),
-        Span::styled("Major I ", Style::default().fg(TEXT_SECONDARY)), 
-    ])).block(block_with_title("Market Index Strip"));
+        Span::styled("S&P 500 ", Style::default().fg(RED)), Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(" Nasdaq-100 ", Style::default().fg(GREEN)), Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(" Dow Jones ", Style::default().fg(GREEN)), Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(" CRYPTO:/CBOP ", Style::default().fg(TEXT_PRIMARY)), Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(" Major Intra ", Style::default().fg(ORANGE)), Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(" LMIIc (UD) ", Style::default().fg(TEXT_DIM)), Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(" Major I ", Style::default().fg(TEXT_DIM)), 
+    ])).block(block_with_title(" Market Index Strip "));
     f.render_widget(p, area);
 }
 
@@ -411,114 +623,226 @@ fn draw_order_book(f: &mut Frame, area: Rect, app: &App) {
     }).collect();
 
     let table = Table::new(t_rows, [Constraint::Percentage(16); 6])
-        .header(Row::new(vec!["Asks", "Size", "Total", "Bids", "Size", "Total"]).style(Style::default().fg(TEXT_SECONDARY)))
-        .block(block_with_title("Order Book"));
+        .header(Row::new(vec!["Asks", "Size", "Total", "Bids", "Size", "Total"]).style(Style::default().fg(TEXT_DIM)))
+        .block(active_block_with_title(" Order Book ", app.active_panel == 2));
     
     f.render_widget(table, area);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENHANCED DEXTER PANEL — Full signal card
+// ═══════════════════════════════════════════════════════════════════════════════
+
 fn draw_dexter_analyst(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(BORDER))
+        .border_style(Style::default().fg(if app.active_panel == 3 { BORDER_ACTIVE } else { BORDER }))
         .title(Line::from(vec![
-            Span::styled("● ", Style::default().fg(BLUE)),
-            Span::styled("DEXTER - FINANCIAL ANALYST", Style::default().fg(TEXT_SECONDARY))
+            Span::styled("◉ ", Style::default().fg(CYAN)),
+            Span::styled("DEXTER — FINANCIAL ANALYST", Style::default().fg(if app.active_panel == 3 { BLUE } else { TEXT_SECONDARY }))
         ]))
         .style(Style::default().bg(BG));
         
-    let mut text: Vec<Line> = app.dexter_output.iter()
-        .map(|s| Line::from(s.clone()))
-        .collect();
+    let inner = block.inner(area);
+    f.render_widget(block, area);
 
-    if let Some(rec) = &app.dexter_recommendation {
-        text.push(Line::from(""));
-        let buy_style = if rec == "BUY" { Style::default().fg(Color::Black).bg(GREEN).add_modifier(Modifier::BOLD) } else { Style::default().fg(TEXT_SECONDARY) };
-        let risk_style = if rec == "RISK" { Style::default().fg(Color::Black).bg(ORANGE).add_modifier(Modifier::BOLD) } else { Style::default().fg(TEXT_SECONDARY) };
-        let neutral_style = if rec == "NEUTRAL" { Style::default().fg(Color::Black).bg(TEXT_SECONDARY).add_modifier(Modifier::BOLD) } else { Style::default().fg(TEXT_SECONDARY) };
-        
+    // Loading state
+    if app.dexter_loading {
+        let spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let idx = (app.session_start.elapsed().as_millis() / 100) as usize % spinner_frames.len();
+        f.render_widget(
+            Paragraph::new(vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    format!("  {} Analyzing {} ...", spinner_frames[idx], app.active_symbol), 
+                    Style::default().fg(CYAN)
+                )),
+            ]),
+            inner,
+        );
+        return;
+    }
+
+    let rec = app.dexter_recommendation.as_deref().unwrap_or("—");
+    let rec_color = match rec {
+        "BUY" => GREEN,
+        "SELL" => RED,
+        "RISK" => ORANGE,
+        _ => TEXT_SECONDARY,
+    };
+
+    // Conviction gauge
+    let conf_pct = (app.dexter_confidence * 100.0) as usize;
+    let gauge_filled = conf_pct / 5;
+    let gauge_empty = 20 - gauge_filled.min(20);
+    let gauge_bar = format!("{}{}", "█".repeat(gauge_filled.min(20)), "░".repeat(gauge_empty));
+
+    let gate_text = if app.dexter_safety_gate_pass { "[PASS]" } else { "[BLOCKED]" };
+    let gate_color = if app.dexter_safety_gate_pass { GREEN } else { RED };
+
+    let mut text: Vec<Line> = Vec::new();
+
+    // Signal header
+    text.push(Line::from(vec![
+        Span::styled(format!(" ██ {} ██ ", rec), Style::default().fg(Color::Black).bg(rec_color).add_modifier(Modifier::BOLD)),
+        Span::raw("  "),
+        Span::styled(format!("{} @ $322.50", app.active_symbol), Style::default().fg(TEXT_PRIMARY)),
+    ]));
+
+    // Conviction gauge
+    text.push(Line::from(vec![
+        Span::styled(" Conviction: ", Style::default().fg(TEXT_DIM)),
+        Span::styled(&gauge_bar, Style::default().fg(rec_color)),
+        Span::styled(format!(" {}/100", conf_pct), Style::default().fg(TEXT_PRIMARY)),
+    ]));
+
+    // Rationale (abbreviated for panel space)
+    if !app.dexter_rationale.is_empty() {
+        let truncated: String = app.dexter_rationale.chars().take(60).collect();
         text.push(Line::from(vec![
-            Span::styled(" BUY ", buy_style),
-            Span::raw(" "),
-            Span::styled(" RISK ", risk_style),
-            Span::raw(" "),
-            Span::styled(" NEUTRAL ", neutral_style),
+            Span::styled(format!(" {}", truncated), Style::default().fg(TEXT_SECONDARY)),
         ]));
     }
-        
-    f.render_widget(Paragraph::new(text).block(block), area);
+
+    // Risk parameters
+    text.push(Line::from(vec![
+        Span::styled(" SL:", Style::default().fg(TEXT_DIM)),
+        Span::styled(format!("{:.1}%", app.dexter_stop_loss_pct), Style::default().fg(RED)),
+        Span::styled("  TP:", Style::default().fg(TEXT_DIM)),
+        Span::styled(format!("{:.1}%", app.dexter_take_profit_pct), Style::default().fg(GREEN)),
+        Span::styled("  Size:", Style::default().fg(TEXT_DIM)),
+        Span::styled(format!("{:.1}%", app.dexter_position_size_pct), Style::default().fg(TEXT_PRIMARY)),
+    ]));
+
+    // Safety gate & regime
+    text.push(Line::from(vec![
+        Span::styled(" Gate: ", Style::default().fg(TEXT_DIM)),
+        Span::styled(gate_text, Style::default().fg(gate_color)),
+        Span::styled("  Regime: ", Style::default().fg(TEXT_DIM)),
+        Span::styled(&app.dexter_regime, Style::default().fg(AMBER)),
+    ]));
+
+    f.render_widget(Paragraph::new(text), inner);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENHANCED MIROFISH PANEL — Gauge + agent microstructure
+// ═══════════════════════════════════════════════════════════════════════════════
 
 fn draw_mirofish_sim(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(BORDER))
+        .border_style(Style::default().fg(if app.active_panel == 4 { BORDER_ACTIVE } else { BORDER }))
         .title(Line::from(vec![
-            Span::styled("● ", Style::default().fg(PURPLE)),
-            Span::styled("MIROFISH - SWARM SIMULATION", Style::default().fg(TEXT_SECONDARY))
+            Span::styled("◉ ", Style::default().fg(PURPLE)),
+            Span::styled("MIROFISH — SWARM SIMULATION", Style::default().fg(if app.active_panel == 4 { BLUE } else { TEXT_SECONDARY }))
         ]))
         .style(Style::default().bg(BG));
-        
-    let status = if app.mirofish_running { "5,000 agent simulation running..." } else { "Idle." };
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let status = if app.mirofish_running { 
+        format!("{} agent simulation running...", app.mirofish_agent_count)
+    } else { 
+        "Idle. Press [F] to start.".to_string()
+    };
     
-    let rally_bar = "█".repeat((app.mirofish_rally_pct / 5.0) as usize);
-    let rally_space = "░".repeat(20_usize.saturating_sub((app.mirofish_rally_pct / 5.0) as usize));
+    // Build gauge bars
+    let rally_filled = (app.mirofish_rally_pct / 5.0) as usize;
+    let rally_bar = format!("{}{}", "█".repeat(rally_filled.min(20)), "░".repeat(20 - rally_filled.min(20)));
     
-    let side_bar = "█".repeat((app.mirofish_sideways_pct / 5.0) as usize);
-    let side_space = "░".repeat(20_usize.saturating_sub((app.mirofish_sideways_pct / 5.0) as usize));
+    let side_filled = (app.mirofish_sideways_pct / 5.0) as usize;
+    let side_bar = format!("{}{}", "█".repeat(side_filled.min(20)), "░".repeat(20 - side_filled.min(20)));
     
-    let dip_bar = "█".repeat((app.mirofish_dip_pct / 5.0) as usize);
-    let dip_space = "░".repeat(20_usize.saturating_sub((app.mirofish_dip_pct / 5.0) as usize));
+    let dip_filled = (app.mirofish_dip_pct / 5.0) as usize;
+    let dip_bar = format!("{}{}", "█".repeat(dip_filled.min(20)), "░".repeat(20 - dip_filled.min(20)));
+
+    // Sum check
+    let sum = app.mirofish_rally_pct + app.mirofish_sideways_pct + app.mirofish_dip_pct;
+    let sum_ok = (sum - 100.0).abs() < 0.1;
+    let sum_icon = if sum_ok { "[OK]" } else { "[!]" };
+
+    // Bias detection
+    let bias_text = if app.mirofish_bias_detected { 
+        Span::styled(" [!] BIAS >85% -- herding detected", Style::default().fg(RED).add_modifier(Modifier::BOLD))
+    } else {
+        Span::styled(" [OK] No herding bias detected", Style::default().fg(GREEN))
+    };
 
     let text = vec![
-        Line::from(status),
-        Line::from(""),
-        Line::from("Scenario probability"),
+        Line::from(Span::styled(format!(" {}", status), Style::default().fg(TEXT_SECONDARY))),
+        Line::from(Span::styled(" Scenario probability", Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::BOLD))),
+        // Rally
         Line::from(vec![
-            Span::raw("Rally    "),
-            Span::styled(rally_bar, Style::default().fg(BLUE)),
-            Span::styled(format!("{} {:.0}%", rally_space, app.mirofish_rally_pct), Style::default().fg(BORDER)),
+            Span::styled(" Rally    ", Style::default().fg(TEXT_SECONDARY)),
+            Span::styled(&rally_bar, Style::default().fg(GREEN)),
+            Span::styled(format!(" {:.0}%", app.mirofish_rally_pct), Style::default().fg(GREEN).add_modifier(Modifier::BOLD)),
         ]),
+        // Sideways
         Line::from(vec![
-            Span::raw("Sideways "),
-            Span::styled(side_bar, Style::default().fg(TEXT_SECONDARY)),
-            Span::styled(format!("{} {:.0}%", side_space, app.mirofish_sideways_pct), Style::default().fg(BORDER)),
+            Span::styled(" Sideways ", Style::default().fg(TEXT_SECONDARY)),
+            Span::styled(&side_bar, Style::default().fg(AMBER)),
+            Span::styled(format!(" {:.0}%", app.mirofish_sideways_pct), Style::default().fg(AMBER).add_modifier(Modifier::BOLD)),
         ]),
+        // Dip
         Line::from(vec![
-            Span::raw("Dip      "),
-            Span::styled(dip_bar, Style::default().fg(PURPLE)),
-            Span::styled(format!("{} {:.0}%", dip_space, app.mirofish_dip_pct), Style::default().fg(BORDER)),
+            Span::styled(" Dip      ", Style::default().fg(TEXT_SECONDARY)),
+            Span::styled(&dip_bar, Style::default().fg(PURPLE)),
+            Span::styled(format!(" {:.0}%", app.mirofish_dip_pct), Style::default().fg(PURPLE).add_modifier(Modifier::BOLD)),
         ]),
-        Line::from(""),
+        // Sum check
         Line::from(vec![
-            Span::raw("Institutional accumulation: "),
-            Span::styled("Hitting 80%", Style::default().fg(GREEN))
+            Span::styled(format!(" {:.0} + {:.0} + {:.0} = {:.0}% {}", 
+                app.mirofish_rally_pct, app.mirofish_sideways_pct, app.mirofish_dip_pct, sum, sum_icon), 
+                Style::default().fg(TEXT_DIM)),
         ]),
+        // Agent microstructure
         Line::from(vec![
-            Span::raw("Retail sentiment: "),
-            Span::styled("50% accumulation", Style::default().fg(GREEN))
+            Span::styled(format!(" Agents: {}  Sim: {:.0}ms  OI: {:.2}  σ: {:.3}", 
+                app.mirofish_agent_count, app.mirofish_sim_time_ms, app.mirofish_order_imbalance, app.mirofish_simulated_vol),
+                Style::default().fg(TEXT_DIM)),
+        ]),
+        // Agreement
+        Line::from(vec![
+            Span::styled(format!(" Agreement: {:.0}%  ", app.mirofish_agent_agreement), 
+                Style::default().fg(if app.mirofish_agent_agreement > 85.0 { RED } else { GREEN })),
+            bias_text,
         ]),
     ];
 
-    f.render_widget(Paragraph::new(text).block(block), area);
+    f.render_widget(Paragraph::new(text), inner);
 }
 
-fn draw_order_entry(f: &mut Frame, area: Rect) {
+// ═══════════════════════════════════════════════════════════════════════════════
+// ORDER ENTRY STRIP
+// ═══════════════════════════════════════════════════════════════════════════════
+
+fn draw_order_entry(f: &mut Frame, area: Rect, app: &App) {
+    let mode_indicator = if app.paper_mode {
+        Span::styled(" PAPER ", Style::default().fg(Color::Black).bg(BLUE).add_modifier(Modifier::BOLD))
+    } else {
+        Span::styled(" LIVE ", Style::default().fg(Color::Black).bg(RED).add_modifier(Modifier::BOLD))
+    };
+
     let text = Line::from(vec![
-        Span::raw("Symbol "),
-        Span::styled(" AAPL  ", Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::REVERSED)),
+        mode_indicator,
+        Span::raw("  Symbol "),
+        Span::styled(format!(" {} ", app.active_symbol), Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::REVERSED)),
         Span::raw("   Quantity "),
         Span::styled(" 1     ", Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::REVERSED)),
         Span::raw("   Price "),
         Span::styled(" $20.00 ", Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::REVERSED)),
         Span::raw("   "),
-        Span::styled("LMT / MKT / STP / IOC   ", Style::default().fg(TEXT_SECONDARY)),
+        Span::styled("LMT / MKT / STP / IOC   ", Style::default().fg(TEXT_DIM)),
         Span::styled(" BUY ", Style::default().fg(Color::Black).bg(GREEN).add_modifier(Modifier::BOLD)),
         Span::raw(" "),
         Span::styled(" SELL ", Style::default().fg(Color::White).bg(RED).add_modifier(Modifier::BOLD)),
     ]);
-    f.render_widget(Paragraph::new(text).block(block_with_title("Order Entry Strip")), area);
+    f.render_widget(Paragraph::new(text).block(block_with_title(" Order Entry Strip ")), area);
 }
+
+// ── RIGHT COLUMN ─────────────────────────────────────────────────────────────
 
 fn draw_right_col(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
@@ -546,35 +870,66 @@ fn draw_open_positions(f: &mut Frame, area: Rect, app: &App) {
     }).collect();
 
     let table = Table::new(rows, [Constraint::Percentage(33); 3])
-        .header(Row::new(vec!["Holding", "", "P&L"]).style(Style::default().fg(TEXT_SECONDARY)))
-        .block(block_with_title("Open Positions"));
+        .header(Row::new(vec!["Holding", "", "P&L"]).style(Style::default().fg(TEXT_DIM)))
+        .block(active_block_with_title(" Open Positions ", app.active_panel == 5));
     f.render_widget(table, area);
 }
 
 fn draw_news_feed(f: &mut Frame, area: Rect, app: &App) {
     let items: Vec<ListItem> = app.news.iter().map(|n| {
         ListItem::new(vec![
-            Line::from(Span::styled(format!("{} • {}", n.source, n.time_ago), Style::default().fg(TEXT_SECONDARY))),
+            Line::from(Span::styled(format!("{} • {}", n.source, n.time_ago), Style::default().fg(TEXT_DIM))),
             Line::from(Span::raw(n.headline.clone())),
-            Line::from(""), // spacing
+            Line::from(""),
         ])
     }).collect();
     
-    f.render_widget(List::new(items).block(block_with_title("News Feed")), area);
+    f.render_widget(List::new(items).block(block_with_title(" News Feed ")), area);
 }
 
 fn draw_day_pnl(f: &mut Frame, area: Rect, app: &App) {
     let color = if app.day_pnl >= 0.0 { GREEN } else { RED };
     let text = vec![
-        Line::from(vec![Span::raw("Day P&L:           "), Span::styled(format!("${:.2}K", app.day_pnl), Style::default().fg(color))]),
-        Line::from(vec![Span::raw("Available power:  "), Span::raw(format!("{:.1}B", app.available_power))]),
+        Line::from(vec![
+            Span::styled(" Day P&L:           ", Style::default().fg(TEXT_DIM)), 
+            Span::styled(format!("${:.2}K", app.day_pnl), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(vec![
+            Span::styled(" Available power:  ", Style::default().fg(TEXT_DIM)), 
+            Span::raw(format!("{:.1}B", app.available_power)),
+        ]),
     ];
     f.render_widget(Paragraph::new(text).block(Block::default().borders(Borders::NONE)), area);
 }
 
-fn draw_bottom_bar(f: &mut Frame, area: Rect) {
+// ═══════════════════════════════════════════════════════════════════════════════
+// BOTTOM STATUS BAR — Live metrics
+// ═══════════════════════════════════════════════════════════════════════════════
+
+fn draw_bottom_bar(f: &mut Frame, area: Rect, app: &App) {
+    let uptime = app.session_uptime();
+    let fill_ratio = app.fill_ratio_str();
+    
     let text = Line::from(vec![
-        Span::styled("Rust version: 6.19 | async runtime: tokio | Active thread: 1 | Feed protocol: MPSC | Dexter: 0 | MiroFish active agent: 6 | Orders sent: 15 | Fills vs rejections: 0 | Session uptime: 12:05:32", Style::default().fg(TEXT_SECONDARY))
+        Span::styled(" Rust v6.19 ", Style::default().fg(TEXT_DIM)),
+        Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(" tokio ", Style::default().fg(TEXT_DIM)),
+        Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(" Thread: 1 ", Style::default().fg(TEXT_DIM)),
+        Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(" MPSC ", Style::default().fg(TEXT_DIM)),
+        Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(format!(" Dexter: {} ", app.dexter_call_count), Style::default().fg(CYAN)),
+        Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(format!(" Swarm: {} ", app.mirofish_agent_count), Style::default().fg(PURPLE)),
+        Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(format!(" Orders: {} ", app.orders_sent), Style::default().fg(TEXT_DIM)),
+        Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(format!(" Fills: {} ", fill_ratio), Style::default().fg(TEXT_DIM)),
+        Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(format!(" Seq: {} ", app.sequence_id), Style::default().fg(TEXT_DIM)),
+        Span::styled("│", Style::default().fg(BORDER)),
+        Span::styled(format!(" Uptime: {} ", uptime), Style::default().fg(GREEN)),
     ]);
     f.render_widget(Paragraph::new(text).style(Style::default().bg(BG)), area);
 }

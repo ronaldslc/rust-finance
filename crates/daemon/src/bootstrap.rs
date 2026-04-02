@@ -1,7 +1,7 @@
 //! Daemon bootstrap: wires all data sources, risk chain, and execution
 //! into a running system.
 
-use common::time::{RealtimeClock, SequenceGenerator};
+use common::time::SequenceGenerator;
 use execution::gateway::ExecutionGateway;
 use execution::mock_executor::MockExecutor;
 use execution::alpaca_executor::AlpacaExecutor;

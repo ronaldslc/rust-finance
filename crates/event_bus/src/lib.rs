@@ -5,7 +5,7 @@ use tokio::{
     sync::{mpsc, broadcast},
 };
 use common::events::{BotEvent, ControlCommand};
-use tracing::{info, error};
+use tracing::info;
 
 pub mod subscriber;
 pub mod health;

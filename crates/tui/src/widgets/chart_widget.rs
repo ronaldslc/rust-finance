@@ -26,6 +26,7 @@ const TEXT_SECONDARY: Color = Color::Rgb(148, 163, 184);
 const TEXT_DIM: Color = Color::Rgb(80, 90, 100);
 const CHART_GREEN: Color = Color::Rgb(0, 200, 180);         // Teal line
 const CHART_FILL_TOP: Color = Color::Rgb(0, 80, 70);        // Area fill darker
+#[allow(dead_code)]
 const CHART_FILL_BOT: Color = Color::Rgb(0, 40, 35);        // Area fill darkest
 const VOLUME_BAR: Color = Color::Rgb(60, 70, 80);           // Volume bar gray
 const VOLUME_AVG: Color = Color::Rgb(74, 222, 128);         // Volume SMAVG green
@@ -271,8 +272,7 @@ fn render_price_area(
         .y_bounds([y_low, y_high])
         .paint(move |ctx| {
             // Fill area (vertical lines down to y_low)
-            for i in 0..visible_data.len() {
-                let p = visible_data[i];
+            for p in &visible_data {
                 ctx.draw(&CanvasLine {
                     x1: p.0,
                     y1: y_low,
@@ -388,6 +388,7 @@ fn render_volume_area(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 fn generate_time_labels(_x_min: f64, _x_max: f64, width: u16, time_range: TimeRange) -> Vec<Span<'static>> {
     let months = match time_range {
         TimeRange::Day1 => vec!["9:30", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"],
@@ -426,6 +427,7 @@ fn compute_smavg(data: &[(f64, f64)], period: usize) -> Vec<(f64, f64)> {
     result
 }
 
+#[allow(dead_code)]
 fn format_volume(v: f64) -> String {
     if v >= 1_000_000.0 {
         format!("{:.0}m", v / 1_000_000.0)

@@ -34,3 +34,8 @@ harness = false
 name = "04_pricing_models"
 path = "benches/04_pricing_models.rs"
 harness = false
+
+[[bench]]
+name = "05_institutional_benchmark"
+path = "benches/05_institutional_benchmark.rs"
+harness = false

@@ -36,7 +36,7 @@ impl ResilientIngest {
 
         loop {
             let url_str = self.ws_urls[idx % self.ws_urls.len()].clone();
-            info!("🔌 connecting to WS {}", url_str);
+            info!("[WS] connecting to WS {}", url_str);
 
             match self.connect_and_stream(url_str.clone()).await {
                 Ok(_) => {
@@ -62,7 +62,7 @@ impl ResilientIngest {
     async fn connect_and_stream(&self, ws_url: String) -> anyhow::Result<()> {
         let url = Url::parse(&ws_url)?;
 
-        // 🔥 TCP_NODELAY (big latency win) - connect_async does not easily expose socket options
+        // TCP_NODELAY (big latency win) - connect_async does not easily expose socket options
         // unless we use a custom connector, but standard tokio-tungstenite is usually fine.
         // For true low-latency optimization we would use a custom connector here.
         let (ws_stream, _) = connect_async(url).await?;
@@ -76,7 +76,7 @@ impl ResilientIngest {
             "params":[{"mentions":["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"]}, {"commitment":"processed"}]
         }).to_string();
         write.send(Message::Text(subscribe)).await?;
-        info!("📡 subscribed to logs");
+        info!("[WS] subscribed to logs");
 
         // Ping keepalive (Solana drops idle connections)
         let mut ping_interval = interval(Duration::from_secs(15));
@@ -137,7 +137,7 @@ impl ResilientIngest {
 
         if let Some(ls) = last_slot {
             if head_slot > ls {
-                info!("⏪ Replaying {} → {}", ls, head_slot);
+                info!("[REPLAY] Replaying {} -> {}", ls, head_slot);
 
                 let mut slot = ls + 1;
                 while slot <= head_slot {

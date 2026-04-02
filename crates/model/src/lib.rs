@@ -2,6 +2,7 @@
 use common::Action;
 use anyhow::Result;
 
+#[allow(dead_code)]
 pub struct InferenceEngine {
     // Model path, ONNX session, etc. would go here
     model_path: String,

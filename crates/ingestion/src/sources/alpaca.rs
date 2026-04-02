@@ -4,6 +4,7 @@ use common::time::SequenceGenerator;
 use std::sync::Arc;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct AlpacaSource { seq_gen: Arc<SequenceGenerator> }
 
 impl AlpacaSource { 

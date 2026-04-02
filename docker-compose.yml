@@ -1,6 +1,79 @@
-version: "3.9"
+# docker-compose.yml
+# Full-stack deployment: RustForge daemon + infrastructure services
+#
+# Usage:
+#   docker compose up -d                    # start everything
+#   docker compose up -d daemon             # start daemon + deps only
+#   docker compose run --rm cli             # one-shot CLI command
+#   docker compose --profile benchmark up   # run benchmark_audit
 
 services:
+  # ── Application Services ───────────────────────────────────────────────
+
+  daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/ashutosh0x/rust-finance:latest
+    container_name: rustforge_daemon
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-rustforge}:${POSTGRES_PASSWORD:-rustforge_secret}@pgbouncer:6432/${POSTGRES_DB:-rustforge}
+      REDIS_URL: redis://dragonfly:6379
+    ports:
+      - "50051:50051"   # gRPC
+      - "9090:9090"     # Metrics / health
+    depends_on:
+      dragonfly:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+    networks:
+      - rustforge_net
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/ashutosh0x/rust-finance:latest
+    container_name: rustforge_cli
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-rustforge}:${POSTGRES_PASSWORD:-rustforge_secret}@pgbouncer:6432/${POSTGRES_DB:-rustforge}
+      REDIS_URL: redis://dragonfly:6379
+    command: ["cli"]
+    depends_on:
+      dragonfly:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+    networks:
+      - rustforge_net
+    profiles:
+      - cli
+
+  benchmark_audit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/ashutosh0x/rust-finance:latest
+    container_name: rustforge_benchmark
+    env_file: .env
+    command: ["benchmark_audit"]
+    networks:
+      - rustforge_net
+    profiles:
+      - benchmark
+
+  # ── Infrastructure Services ────────────────────────────────────────────
+
   dragonfly:
     # Pinned by digest for supply-chain security
     # To update: docker pull docker.dragonflydb.io/dragonflydb/dragonfly:latest && docker inspect --format='{{index .RepoDigests 0}}'

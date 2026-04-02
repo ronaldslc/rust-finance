@@ -7,7 +7,6 @@ use axum::{
 };
 use std::net::SocketAddr;
 use tokio::sync::broadcast;
-use futures::sink::SinkExt;
 
 pub async fn serve(tx: broadcast::Sender<String>) {
     let app = Router::new()

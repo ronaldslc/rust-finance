@@ -1,15 +1,15 @@
 // crates/polymarket/src/clob.rs
 
 use crate::auth::{L1Auth, L2Auth, ApiCredentials};
-use crate::signing::{self, Order, create_wallet, sign_order};
+use crate::signing::{Order, create_wallet, sign_order};
 use crate::config::PolymarketConfig;
+use ethers_signers::Signer;
 use reqwest::Client;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error, instrument};
 use uuid::Uuid;
-use ethers_signers::Signer;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Side {

@@ -1,20 +1,37 @@
-/target
-/C:\rust-target
-**/*.rs.bk
-.env
-.idea
-.vscode
-/Cargo.lock
+# Build artifacts
+/target/
 
-# Build/debug logs
-error.txt
-errors.txt
-check_output.txt
-build.log
-daemon_check.log
-workspace_check.log
-error_log.txt
+# Rust backup files
+**/*.rs.bk
+
+# Environment secrets
+.env
+.env.local
+.env.production
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Runtime data
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+data/*.db
+logs/
+
+# Build / debug logs
+*.log
 
 # OS files
 .DS_Store
 Thumbs.db
+
+# Temporary artifacts
+*.pdb
+*.tmp
+*.bak
+emoji_report.txt

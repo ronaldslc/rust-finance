@@ -28,6 +28,7 @@ pub trait Strategy {
 // ── SMA Crossover Strategy ────────────────────────────────────────────────────
 
 /// Classic dual-SMA crossover: buy when fast crosses above slow, sell when below.
+#[derive(Clone)]
 pub struct SimpleMovingAverageCrossover {
     fast_period: usize,
     slow_period: usize,
@@ -129,6 +130,7 @@ impl Strategy for SimpleMovingAverageCrossover {
 // ── Mean Reversion Strategy ───────────────────────────────────────────────────
 
 /// Simple z-score mean reversion: buy oversold, sell overbought.
+#[derive(Clone)]
 pub struct ZScoreMeanReversion {
     window: usize,
     entry_z: f64,

@@ -2,6 +2,24 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::app::App;
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
+    // ── Kill switch overlay active — only allow K (resume) or Q (quit) ────
+    if app.kill_switch_active {
+        match key.code {
+            KeyCode::Char('k') | KeyCode::Char('K') => {
+                app.kill_switch_active = false;
+                app.push_alert("Kill switch DISENGAGED — trading resumed.");
+            }
+            KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
+            KeyCode::Esc => {
+                app.kill_switch_active = false;
+                app.push_alert("Kill switch DISENGAGED — trading resumed.");
+            }
+            _ => {}
+        }
+        return;
+    }
+
+    // ── Help overlay ─────────────────────────────────────────────────────
     if app.show_help {
         match key.code {
             KeyCode::Esc | KeyCode::Char('h') | KeyCode::Char('?') => app.show_help = false,
@@ -10,7 +28,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         return;
     }
     
-    // If a dialog is open, hijack input
+    // ── Dialog hijack ────────────────────────────────────────────────────
     if app.show_buy_dialog || app.show_sell_dialog {
         match key.code {
             KeyCode::Char(c) if c.is_ascii_digit() || c == '.' => {
@@ -25,22 +43,32 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             KeyCode::Esc => {
                 app.dismiss_dialog();
             }
+            KeyCode::Tab => {
+                // Cycle order type in dialog
+                app.cycle_order_type();
+            }
             _ => {}
         }
-        return; // Don't process other hotkeys
+        return;
     }
 
     match (key.modifiers, key.code) {
         // ── Help ──────────────────────────────────────────────────────────
         (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::Char('h')) => app.show_help = true,
 
-        // ── System ────────────────────────────────────────────────────────
-        (KeyModifiers::CONTROL, KeyCode::Char('k')) => {
-            // Kill switch - halt all strategies
-            app.show_help = false;
+        // ── Kill Switch (K) ───────────────────────────────────────────────
+        (KeyModifiers::NONE, KeyCode::Char('k')) => {
+            app.activate_kill_switch();
         }
-        (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
+
+        // ── Paper Mode (M) ───────────────────────────────────────────────
+        (KeyModifiers::NONE, KeyCode::Char('m')) => {
             app.paper_mode = !app.paper_mode;
+            if app.paper_mode {
+                app.push_alert("Mode: PAPER — orders will be simulated.");
+            } else {
+                app.push_alert("Mode: LIVE — orders will route to broker.");
+            }
         }
 
         // ── Quit ──────────────────────────────────────────────────────────
@@ -56,27 +84,24 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         (KeyModifiers::NONE, KeyCode::Char('6')) => app.active_panel = 5,
 
         // ── Scroll ────────────────────────────────────────────────────────
-        (KeyModifiers::NONE, KeyCode::Up)   | (KeyModifiers::NONE, KeyCode::Char('k')) => app.scroll_up(),
-        (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => app.scroll_down(),
+        (KeyModifiers::NONE, KeyCode::Up)   => app.scroll_up(),
+        (KeyModifiers::NONE, KeyCode::Down) => app.scroll_down(),
         (KeyModifiers::NONE, KeyCode::Tab)  => app.next_panel(),
         (_, KeyCode::BackTab)               => app.prev_panel(),
 
         // ── Chart Controls ────────────────────────────────────────────────
-        // Zoom: +/- or Ctrl+Up/Down
         (KeyModifiers::NONE, KeyCode::Char('+')) | (KeyModifiers::NONE, KeyCode::Char('=')) => {
             app.chart_zoom_in();
         }
         (KeyModifiers::NONE, KeyCode::Char('-')) => {
             app.chart_zoom_out();
         }
-        // Scroll chart: Shift+Left/Right or H/L
-        (KeyModifiers::SHIFT, KeyCode::Left) | (KeyModifiers::SHIFT, KeyCode::Char('H')) => {
+        (KeyModifiers::SHIFT, KeyCode::Left) => {
             app.chart_scroll_left();
         }
-        (KeyModifiers::SHIFT, KeyCode::Right) | (KeyModifiers::SHIFT, KeyCode::Char('L')) => {
+        (KeyModifiers::SHIFT, KeyCode::Right) => {
             app.chart_scroll_right();
         }
-        // Time range: t
         (KeyModifiers::NONE, KeyCode::Char('t')) => app.cycle_time_range(),
 
         // ── Trading ───────────────────────────────────────────────────────
@@ -85,21 +110,22 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         (KeyModifiers::NONE, KeyCode::Char('b')) => app.open_buy_dialog(),
         (KeyModifiers::NONE, KeyCode::Char('s')) => app.open_sell_dialog(),
         (KeyModifiers::NONE, KeyCode::Char('x')) => app.cancel_selected(),
-        (KeyModifiers::SHIFT, KeyCode::Char('H')) => app.halve_position(),
         (KeyModifiers::NONE, KeyCode::Enter) => app.confirm_order(),
         (KeyModifiers::NONE, KeyCode::Esc)   => app.dismiss_dialog(),
 
-        // ── AI ────────────────────────────────────────────────────────────
+        // ── AI Engine ─────────────────────────────────────────────────────
+        (KeyModifiers::NONE, KeyCode::Char('d')) => app.trigger_dexter(),      // D = Dexter
+        (KeyModifiers::NONE, KeyCode::Char('f')) => app.trigger_mirofish(),    // F = Mirofish
+        (KeyModifiers::NONE, KeyCode::Char('c')) => app.cycle_confidence(),
         (KeyModifiers::CONTROL, KeyCode::Char('a')) => app.toggle_auto_trade(),
-        (KeyModifiers::SHIFT, KeyCode::Char('A'))   => app.trigger_mirofish(),
-        (KeyModifiers::NONE, KeyCode::Char('a'))    => app.trigger_dexter(),
-        (KeyModifiers::NONE, KeyCode::Char('c'))    => app.cycle_confidence(),
 
         // ── Data ──────────────────────────────────────────────────────────
-        (KeyModifiers::CONTROL, KeyCode::Char('e')) => app.export_csv(),
+        (KeyModifiers::NONE, KeyCode::Char('e')) => app.export_csv(),
+        (KeyModifiers::NONE, KeyCode::F(5))      => app.refresh_portfolio(),
         (KeyModifiers::CONTROL, KeyCode::Char('b')) => app.run_backtest(),
-        (KeyModifiers::CONTROL, KeyCode::Char('m')) => app.toggle_data_source(),
-        (KeyModifiers::NONE, KeyCode::F(5))         => app.refresh_portfolio(),
+
+        // ── Vim-style scroll (j/k only when not triggering kill switch) ───
+        (KeyModifiers::NONE, KeyCode::Char('j')) => app.scroll_down(),
 
         _ => {}
     }
@@ -110,21 +136,13 @@ pub fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
 
     match mouse.kind {
         MouseEventKind::ScrollUp => {
-            // Zoom In
             app.chart_zoom_in();
         }
         MouseEventKind::ScrollDown => {
-            // Zoom Out
             app.chart_zoom_out();
         }
         MouseEventKind::Drag(MouseButton::Left) => {
-            // Very simplistic drag tracking: 
-            // In a real app we'd track the previous X/Y coords to delta scroll.
-            // For now, if moving mouse, let's assume we want to trigger a scroll action.
-            // We can check if column is moving left/right if we kept state,
-            // but for a stateless approach we can't easily tell direction.
-            // As a basic implementation, we just use hotkeys or precise logic.
-            // Let's implement drag based on a cached last_mouse_x later if needed.
+            // Drag-to-scroll would need state tracking — deferred
         }
         _ => {}
     }

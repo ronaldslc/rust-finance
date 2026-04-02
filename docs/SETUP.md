@@ -27,7 +27,7 @@ cp .env.example .env
 2. Create a free account
 3. On dashboard, scroll to "API Keys" section (bottom-right)
 4. Click "Generate New Keys"
-5. ⚠️ **Copy both keys immediately** — secret is shown only once
+5. **WARNING: Copy both keys immediately** -- secret is shown only once
 6. Paste into `.env`:
    - `ALPACA_API_KEY=` (your Key ID)
    - `ALPACA_SECRET_KEY=` (your Secret Key)

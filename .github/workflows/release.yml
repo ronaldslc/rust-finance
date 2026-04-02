@@ -41,6 +41,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # ── Linux x86_64 ──────────────────────────────────────
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: rustforge-daemon-linux-x86_64
@@ -53,6 +54,13 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: rustforge-cli-linux-x86_64
             binary: cli
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: rustforge-benchmark-audit-linux-x86_64
+            binary: benchmark_audit
+            package: backtest
+
+          # ── macOS arm64 (Apple Silicon) ─────────────────────
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: rustforge-daemon-macos-aarch64
@@ -61,6 +69,17 @@ jobs:
             target: aarch64-apple-darwin
             artifact_name: rustforge-tui-macos-aarch64
             binary: tui
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: rustforge-cli-macos-aarch64
+            binary: cli
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: rustforge-benchmark-audit-macos-aarch64
+            binary: benchmark_audit
+            package: backtest
+
+          # ── Windows x86_64 ─────────────────────────────────
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: rustforge-daemon-windows-x86_64.exe
@@ -69,6 +88,15 @@ jobs:
             target: x86_64-pc-windows-msvc
             artifact_name: rustforge-tui-windows-x86_64.exe
             binary: tui
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: rustforge-cli-windows-x86_64.exe
+            binary: cli
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: rustforge-benchmark-audit-windows-x86_64.exe
+            binary: benchmark_audit
+            package: backtest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -85,10 +113,16 @@ jobs:
 
       # Build with embedded SBOM (Cargo.lock baked into binary)
       - name: Build release binary with embedded dependency manifest
+        shell: bash
         run: |
+          PKG="${{ matrix.package || matrix.binary }}"
+          BIN_FLAG=""
+          if [[ -n "${{ matrix.package }}" ]]; then
+            BIN_FLAG="--bin ${{ matrix.binary }}"
+          fi
           cargo auditable build --release \
             --target ${{ matrix.target }} \
-            -p ${{ matrix.binary }}
+            -p "${PKG}" ${BIN_FLAG}
 
       - name: Rename binary
         shell: bash
@@ -157,15 +191,31 @@ jobs:
             rustforge-cli-linux-x86_64/rustforge-cli-linux-x86_64
             rustforge-cli-linux-x86_64/rustforge-cli-linux-x86_64.sha256
             rustforge-cli-linux-x86_64/rustforge-cli-linux-x86_64.sigstore.json
+            rustforge-benchmark-audit-linux-x86_64/rustforge-benchmark-audit-linux-x86_64
+            rustforge-benchmark-audit-linux-x86_64/rustforge-benchmark-audit-linux-x86_64.sha256
+            rustforge-benchmark-audit-linux-x86_64/rustforge-benchmark-audit-linux-x86_64.sigstore.json
             rustforge-daemon-macos-aarch64/rustforge-daemon-macos-aarch64
             rustforge-daemon-macos-aarch64/rustforge-daemon-macos-aarch64.sha256
             rustforge-daemon-macos-aarch64/rustforge-daemon-macos-aarch64.sigstore.json
             rustforge-tui-macos-aarch64/rustforge-tui-macos-aarch64
             rustforge-tui-macos-aarch64/rustforge-tui-macos-aarch64.sha256
             rustforge-tui-macos-aarch64/rustforge-tui-macos-aarch64.sigstore.json
+            rustforge-cli-macos-aarch64/rustforge-cli-macos-aarch64
+            rustforge-cli-macos-aarch64/rustforge-cli-macos-aarch64.sha256
+            rustforge-cli-macos-aarch64/rustforge-cli-macos-aarch64.sigstore.json
+            rustforge-benchmark-audit-macos-aarch64/rustforge-benchmark-audit-macos-aarch64
+            rustforge-benchmark-audit-macos-aarch64/rustforge-benchmark-audit-macos-aarch64.sha256
+            rustforge-benchmark-audit-macos-aarch64/rustforge-benchmark-audit-macos-aarch64.sigstore.json
             rustforge-daemon-windows-x86_64.exe/rustforge-daemon-windows-x86_64.exe
             rustforge-daemon-windows-x86_64.exe/rustforge-daemon-windows-x86_64.exe.sha256
             rustforge-daemon-windows-x86_64.exe/rustforge-daemon-windows-x86_64.exe.sigstore.json
             rustforge-tui-windows-x86_64.exe/rustforge-tui-windows-x86_64.exe
             rustforge-tui-windows-x86_64.exe/rustforge-tui-windows-x86_64.exe.sha256
             rustforge-tui-windows-x86_64.exe/rustforge-tui-windows-x86_64.exe.sigstore.json
+            rustforge-cli-windows-x86_64.exe/rustforge-cli-windows-x86_64.exe
+            rustforge-cli-windows-x86_64.exe/rustforge-cli-windows-x86_64.exe.sha256
+            rustforge-cli-windows-x86_64.exe/rustforge-cli-windows-x86_64.exe.sigstore.json
+            rustforge-benchmark-audit-windows-x86_64.exe/rustforge-benchmark-audit-windows-x86_64.exe
+            rustforge-benchmark-audit-windows-x86_64.exe/rustforge-benchmark-audit-windows-x86_64.exe.sha256
+            rustforge-benchmark-audit-windows-x86_64.exe/rustforge-benchmark-audit-windows-x86_64.exe.sigstore.json
+

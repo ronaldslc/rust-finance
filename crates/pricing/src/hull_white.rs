@@ -46,14 +46,14 @@ fn hw_b(a: f64, t: f64, cap_t: f64) -> f64 {
 fn hw_ln_a(a: f64, sigma: f64, t: f64, cap_t: f64, curve: &YieldCurve) -> f64 {
     let b = hw_b(a, t, cap_t);
     let p0t  = curve.discount_factor(t);
-    let p0T  = curve.discount_factor(cap_t);
+    let p0_cap_t = curve.discount_factor(cap_t);
     let f0t  = curve.forward_rate(t);
     let sigma2_term = if a.abs() < 1e-8 {
         sigma * sigma * t * b * b / 2.0
     } else {
         (sigma * sigma / (4.0 * a)) * (1.0 - (-2.0 * a * t).exp()) * b * b
     };
-    (p0T / p0t).ln() + b * f0t - sigma2_term
+    (p0_cap_t / p0t).ln() + b * f0t - sigma2_term
 }
 
 pub fn hw_bond_price(p: &HullWhiteParams, curve: &YieldCurve, r_t: f64, t: f64, cap_t: f64) -> f64 {

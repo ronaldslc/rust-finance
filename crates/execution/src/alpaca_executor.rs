@@ -1,6 +1,6 @@
 use crate::gateway::{ExecutionGateway, OpenRequest, TimeInForce};
 use async_trait::async_trait;
-use common::events::{OrderEvent, OrderSubmitted, OrderAccepted, OrderSide, OrderType};
+use common::events::{OrderEvent, OrderAccepted, OrderSide, OrderType};
 use compact_str::CompactString;
 use ingestion::alpaca::{AlpacaRestClient, AlpacaConfig, OrderRequest as AlpacaOrderRequest};
 use tracing::{info, error};

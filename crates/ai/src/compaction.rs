@@ -56,6 +56,7 @@ struct MessagesRequest<'a> {
 
 /// Subset of the response we care about.
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct MessagesResponse {
     content: Vec<ContentBlock>,
     stop_reason: String,
@@ -63,6 +64,7 @@ struct MessagesResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct UsageStats {
     input_tokens: u32,
     output_tokens: u32,

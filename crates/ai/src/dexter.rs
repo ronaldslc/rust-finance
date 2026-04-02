@@ -8,7 +8,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::info;
 
 // use crate::hybrid_pipeline::FusedContext; // FusedContext lives in daemon module
 // We will access FusedContext directly during compilation if possible, 
@@ -98,7 +98,7 @@ pub async fn analyse<T: FusedContextLike>(ctx: &T) -> Result<DexterSignal> {
 
 fn build_user_prompt(symbol: &str) -> String {
     format!(
-        r#"Analyse {} using the quantitative data, swarm simulation, and knowledge graph above.
+        r#"Analyse {symbol} using the quantitative data, swarm simulation, and knowledge graph above.
 
 Return ONLY a JSON object matching this schema — no preamble, no markdown:
 

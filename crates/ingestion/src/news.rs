@@ -48,6 +48,7 @@ pub struct NewsHeadline {
 // ─── Finnhub Response Model ─────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct FinnhubNewsItem {
     category: Option<String>,
     datetime: i64,
@@ -60,6 +61,7 @@ struct FinnhubNewsItem {
 // ─── Alpaca Response Model ──────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct AlpacaNewsItem {
     headline: String,
     source: String,
