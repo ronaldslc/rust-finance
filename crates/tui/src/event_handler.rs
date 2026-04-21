@@ -1,7 +1,10 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crate::app::App;
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
+    // Only handle key PRESS events — ignore Release/Repeat (critical on Windows)
+    if key.kind != KeyEventKind::Press { return; }
+
     // ── Kill switch overlay active — only allow K (resume) or Q (quit) ────
     if app.kill_switch_active {
         match key.code {
@@ -22,7 +25,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
     // ── Help overlay ─────────────────────────────────────────────────────
     if app.show_help {
         match key.code {
-            KeyCode::Esc | KeyCode::Char('h') | KeyCode::Char('?') => app.show_help = false,
+            KeyCode::Esc | KeyCode::Char('?') => app.show_help = false,
             _ => {}
         }
         return;
@@ -110,8 +113,16 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         (KeyModifiers::NONE, KeyCode::Char('b')) => app.open_buy_dialog(),
         (KeyModifiers::NONE, KeyCode::Char('s')) => app.open_sell_dialog(),
         (KeyModifiers::NONE, KeyCode::Char('x')) => app.cancel_selected(),
-        (KeyModifiers::NONE, KeyCode::Enter) => app.confirm_order(),
-        (KeyModifiers::NONE, KeyCode::Esc)   => app.dismiss_dialog(),
+        (KeyModifiers::NONE, KeyCode::Enter) => {
+            if app.show_buy_dialog || app.show_sell_dialog {
+                app.confirm_order();
+            }
+        }
+        (KeyModifiers::NONE, KeyCode::Esc) => {
+            if app.show_buy_dialog || app.show_sell_dialog {
+                app.dismiss_dialog();
+            }
+        }
 
         // ── AI Engine ─────────────────────────────────────────────────────
         (KeyModifiers::NONE, KeyCode::Char('d')) => app.trigger_dexter(),      // D = Dexter

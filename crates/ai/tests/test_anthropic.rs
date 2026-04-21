@@ -1,4 +1,4 @@
-use ai::anthropic_client::{MessageResponse, ContentBlock};
+use ai::anthropic_client::MessageResponse;
 use ai::signal::AISignal;
 use serde_json::json;
 

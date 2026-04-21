@@ -32,7 +32,9 @@ const VOLUME_BAR: Color = Color::Rgb(60, 70, 80);           // Volume bar gray
 const VOLUME_AVG: Color = Color::Rgb(74, 222, 128);         // Volume SMAVG green
 const GREEN: Color = Color::Rgb(74, 222, 128);
 const RED: Color = Color::Rgb(248, 113, 113);
+#[allow(dead_code)]
 const BLUE_ACCENT: Color = Color::Rgb(0, 150, 220);
+#[allow(dead_code)]
 const ORANGE: Color = Color::Rgb(249, 115, 22);
 
 // ── Time Ranges ───────────────────────────────────────────────────────────────
@@ -134,19 +136,25 @@ pub struct ChartStats {
     pub average: f64,
     pub volume: f64,
     pub volume_smavg: f64,
+    pub market_cap: f64,
+    pub price_change: f64,
+    pub price_change_pct: f64,
 }
 
 impl Default for ChartStats {
     fn default() -> Self {
         Self {
-            last_price: 30.25,
-            high_price: 30.77,
+            last_price: 1461.98,
+            high_price: 1461.98,
             high_date: "02/09/12".to_string(),
-            low_price: 23.705,
+            low_price: 1400.0,
             low_date: "06/10/11".to_string(),
-            average: 26.1696,
-            volume: 59.663,
+            average: 1430.0,
+            volume: 11502.2,
             volume_smavg: 48.048,
+            market_cap: 74392.0,
+            price_change: 0.031,
+            price_change_pct: 2.92,
         }
     }
 }
@@ -193,39 +201,48 @@ pub fn render_chart(
 }
 
 /// The stats/legend overlay matching Bloomberg style
-fn render_stats_legend(f: &mut Frame, area: Rect, stats: &ChartStats, state: &ChartState) {
+fn render_stats_legend(f: &mut Frame, area: Rect, stats: &ChartStats, _state: &ChartState) {
+    let change_color = if stats.price_change >= 0.0 { GREEN } else { RED };
+    let change_sign = if stats.price_change >= 0.0 { "+" } else { "" };
+
     if area.width < 40 {
-        // Compact mode
         let line = Line::from(vec![
-            Span::styled("● ", Style::default().fg(BLUE_ACCENT)),
-            Span::styled("Day Session  ", Style::default().fg(TEXT_SECONDARY)),
-            Span::styled(format!("Last: {:.2}  ", stats.last_price), Style::default().fg(TEXT_PRIMARY)),
-            Span::styled(format!("[{}]", state.time_range.label()), Style::default().fg(ORANGE)),
+            Span::styled(format!("{:.2} ", stats.last_price), Style::default().fg(GREEN).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!("{}${:.3} ({}{:.2}%)", change_sign, stats.price_change.abs(), change_sign, stats.price_change_pct),
+                Style::default().fg(change_color),
+            ),
         ]);
         f.render_widget(Paragraph::new(line), area);
         return;
     }
 
+    // Right-side info: compute padding to push Volume/MarketCap toward right
+    let vol_str = format_number_with_commas(stats.volume);
+    let mcap_str = format_number_with_commas(stats.market_cap);
+
+    let price_text = format!(" {:.2}", stats.last_price);
+    let change_text = format!(" {}${:.3} ({}{:.2}%)", change_sign, stats.price_change.abs(), change_sign, stats.price_change_pct);
+    let vol_label = format!("Volume:   {}B", vol_str);
+    let svgline = " SVG polyline #8";
+    let mcap_label = format!("Market Cap: ${} MB", mcap_str);
+
+    let used_line1 = price_text.len() + change_text.len() + vol_label.len();
+    let pad1 = if (area.width as usize) > used_line1 + 4 { area.width as usize - used_line1 - 4 } else { 2 };
+    let used_line2 = svgline.len() + mcap_label.len();
+    let pad2 = if (area.width as usize) > used_line2 + 4 { area.width as usize - used_line2 - 4 } else { 2 };
+
     let lines = vec![
         Line::from(vec![
-            Span::styled(" ● ", Style::default().fg(BLUE_ACCENT)),
-            Span::styled("Day Session   ", Style::default().fg(TEXT_SECONDARY)),
-            Span::styled("□ ", Style::default().fg(TEXT_DIM)),
-            Span::styled("Last Price    ", Style::default().fg(TEXT_SECONDARY)),
-            Span::styled(format!("{:.2}   ", stats.last_price), Style::default().fg(TEXT_PRIMARY)),
-            Span::styled("↑ ", Style::default().fg(GREEN)),
-            Span::styled(format!("High on {}  ", stats.high_date), Style::default().fg(TEXT_SECONDARY)),
-            Span::styled(format!("{:.2}   ", stats.high_price), Style::default().fg(TEXT_PRIMARY)),
+            Span::styled(price_text, Style::default().fg(GREEN).add_modifier(Modifier::BOLD)),
+            Span::styled(change_text, Style::default().fg(change_color)),
+            Span::raw(" ".repeat(pad1)),
+            Span::styled(vol_label, Style::default().fg(TEXT_PRIMARY)),
         ]),
         Line::from(vec![
-            Span::styled("   ", Style::default()),
-            Span::styled(format!("[{}]  ", state.time_range.label()), Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
-            Span::styled("◇ ", Style::default().fg(TEXT_DIM)),
-            Span::styled("Average       ", Style::default().fg(TEXT_SECONDARY)),
-            Span::styled(format!("{:.4}  ", stats.average), Style::default().fg(TEXT_PRIMARY)),
-            Span::styled("↓ ", Style::default().fg(RED)),
-            Span::styled(format!("Low on {}   ", stats.low_date), Style::default().fg(TEXT_SECONDARY)),
-            Span::styled(format!("{:.3}", stats.low_price), Style::default().fg(TEXT_PRIMARY)),
+            Span::styled(svgline.to_string(), Style::default().fg(TEXT_DIM)),
+            Span::raw(" ".repeat(pad2)),
+            Span::styled(mcap_label, Style::default().fg(TEXT_PRIMARY)),
         ]),
     ];
     f.render_widget(Paragraph::new(lines), area);
@@ -425,6 +442,26 @@ fn compute_smavg(data: &[(f64, f64)], period: usize) -> Vec<(f64, f64)> {
         }
     }
     result
+}
+
+fn format_number_with_commas(n: f64) -> String {
+    let whole = n.trunc() as i64;
+    let frac_part = ((n - n.trunc()).abs() * 10.0).round() as u64;
+    let s = whole.abs().to_string();
+    let mut result = String::new();
+    let len = s.len();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    if whole < 0 { result = format!("-{}", result); }
+    if frac_part > 0 {
+        format!("{}.{}", result, frac_part)
+    } else {
+        result
+    }
 }
 
 #[allow(dead_code)]

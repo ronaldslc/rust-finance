@@ -1,0 +1,58 @@
+﻿cargo :    Compiling aws-lc-rs v1.16.2
+At line:1 char:1
++ cargo test --workspace 2>&1 | Out-File -FilePath test_output.txt 
+-Enc ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling aws-lc-rs  
+   v1.16.2:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   Compiling ai v0.1.0 (C:\Users\ashut\OneDrive\Documents\rust 
+trading terminal\rust-finance\crates\ai)
+   Compiling alerts v0.1.0 (C:\Users\ashut\OneDrive\Documents\rust 
+trading terminal\rust-finance\crates\alerts)
+   Compiling execution v0.1.0 
+(C:\Users\ashut\OneDrive\Documents\rust trading 
+terminal\rust-finance\crates\execution)
+   Compiling ingestion v0.1.0 
+(C:\Users\ashut\OneDrive\Documents\rust trading 
+terminal\rust-finance\crates\ingestion)
+   Compiling cli v0.1.0 (C:\Users\ashut\OneDrive\Documents\rust 
+trading terminal\rust-finance\crates\cli)
+   Compiling event_bus v0.1.0 
+(C:\Users\ashut\OneDrive\Documents\rust trading 
+terminal\rust-finance\crates\event_bus)
+   Compiling oms v0.1.0 (C:\Users\ashut\OneDrive\Documents\rust 
+trading terminal\rust-finance\crates\oms)
+   Compiling compliance v0.1.0 
+(C:\Users\ashut\OneDrive\Documents\rust trading 
+terminal\rust-finance\crates\compliance)
+   Compiling signals v0.1.0 (C:\Users\ashut\OneDrive\Documents\rust 
+trading terminal\rust-finance\crates\signals)
+   Compiling model v0.1.0 (C:\Users\ashut\OneDrive\Documents\rust 
+trading terminal\rust-finance\crates\model)
+error[E0433]: failed to resolve: use of undeclared type `OrderStatus`
+   --> crates\oms\src\blotter.rs:242:34
+    |
+242 |         assert_eq!(order.status, OrderStatus::Pending);
+    |                                  ^^^^^^^^^^^ use of undeclared 
+type `OrderStatus`
+    |
+help: consider importing one of these enums
+    |
+230 +     use crate::OrderStatus;
+    |
+230 +     use common::models::order::OrderStatus;
+    |
+
+   Compiling strategy v0.1.0 (C:\Users\ashut\OneDrive\Documents\rust 
+trading terminal\rust-finance\crates\strategy)
+   Compiling ml v0.1.0 (C:\Users\ashut\OneDrive\Documents\rust 
+trading terminal\rust-finance\crates\ml)
+   Compiling pricing v0.1.0 (C:\Users\ashut\OneDrive\Documents\rust 
+trading terminal\rust-finance\crates\pricing)
+   Compiling tests v0.1.0 (C:\Users\ashut\OneDrive\Documents\rust 
+trading terminal\rust-finance\crates\tests)
+For more information about this error, try `rustc --explain E0433`.
+error: could not compile `oms` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

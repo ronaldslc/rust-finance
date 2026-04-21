@@ -191,3 +191,153 @@ impl BracketEngine {
         self.brackets.get(id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::mpsc;
+
+    fn make_bracket(side: OrderSide, entry_price: f64, tp_price: f64, sl_price: f64) -> BracketOrder {
+        BracketOrder {
+            id: "bracket-001".to_string(),
+            symbol: "NVDA".to_string(),
+            entry: Order {
+                id: "entry-001".to_string(),
+                symbol: "NVDA".to_string(),
+                side: side.clone(),
+                order_type: OrderType::Limit,
+                quantity: 10.0,
+                limit_price: Some(entry_price),
+                stop_price: None,
+                status: OrderStatus::Pending,
+            },
+            take_profit: BracketLeg {
+                price: tp_price,
+                quantity: 10.0,
+                order_id: None,
+                status: LegStatus::Pending,
+            },
+            stop_loss: BracketLeg {
+                price: sl_price,
+                quantity: 10.0,
+                order_id: None,
+                status: LegStatus::Pending,
+            },
+            state: BracketState::PendingEntry,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_bracket_submit_sets_pending_entry() {
+        let (order_tx, mut order_rx) = mpsc::channel(16);
+        let (cancel_tx, _cancel_rx) = mpsc::channel(16);
+        let mut engine = BracketEngine::new(order_tx, cancel_tx);
+
+        let bracket = make_bracket(OrderSide::Buy, 900.0, 970.0, 865.0);
+        let id = engine.submit(bracket).await.unwrap();
+        assert_eq!(engine.get(&id).unwrap().state, BracketState::PendingEntry);
+
+        // Entry order should have been sent
+        let entry = order_rx.recv().await.unwrap();
+        assert_eq!(entry.id, "entry-001");
+    }
+
+    #[tokio::test]
+    async fn test_bracket_oco_tp_cancels_sl() {
+        let (order_tx, mut order_rx) = mpsc::channel(16);
+        let (cancel_tx, mut cancel_rx) = mpsc::channel(16);
+        let mut engine = BracketEngine::new(order_tx, cancel_tx);
+
+        let bracket = make_bracket(OrderSide::Buy, 900.0, 970.0, 865.0);
+        let id = engine.submit(bracket).await.unwrap();
+        let _ = order_rx.recv().await; // consume entry
+
+        // Simulate entry fill → activates bracket
+        engine.on_fill(&"entry-001".to_string(), 900.0).await;
+        assert_eq!(engine.get(&id).unwrap().state, BracketState::Active);
+
+        // Consume TP and SL leg orders
+        let _tp_order = order_rx.recv().await.unwrap();
+        let _sl_order = order_rx.recv().await.unwrap();
+
+        // Simulate TP fill → should cancel SL
+        engine.on_fill(&"bracket-001-TP".to_string(), 970.0).await;
+        let bracket = engine.get(&id).unwrap();
+        assert_eq!(bracket.state, BracketState::TakeProfitFilled);
+        assert_eq!(bracket.take_profit.status, LegStatus::Filled);
+        assert_eq!(bracket.stop_loss.status, LegStatus::Cancelled);
+
+        // SL cancel should have been sent
+        let cancelled_id = cancel_rx.recv().await.unwrap();
+        assert_eq!(cancelled_id, "bracket-001-SL");
+    }
+
+    #[tokio::test]
+    async fn test_bracket_oco_sl_cancels_tp() {
+        let (order_tx, mut order_rx) = mpsc::channel(16);
+        let (cancel_tx, mut cancel_rx) = mpsc::channel(16);
+        let mut engine = BracketEngine::new(order_tx, cancel_tx);
+
+        let bracket = make_bracket(OrderSide::Buy, 900.0, 970.0, 865.0);
+        let id = engine.submit(bracket).await.unwrap();
+        let _ = order_rx.recv().await; // consume entry
+        engine.on_fill(&"entry-001".to_string(), 900.0).await;
+        let _ = order_rx.recv().await; // TP
+        let _ = order_rx.recv().await; // SL
+
+        // Simulate SL fill → should cancel TP
+        engine.on_fill(&"bracket-001-SL".to_string(), 865.0).await;
+        let bracket = engine.get(&id).unwrap();
+        assert_eq!(bracket.state, BracketState::StopLossFilled);
+        assert_eq!(bracket.stop_loss.status, LegStatus::Filled);
+        assert_eq!(bracket.take_profit.status, LegStatus::Cancelled);
+
+        let cancelled_id = cancel_rx.recv().await.unwrap();
+        assert_eq!(cancelled_id, "bracket-001-TP");
+    }
+
+    #[tokio::test]
+    async fn test_bracket_legs_opposite_side() {
+        let (order_tx, mut order_rx) = mpsc::channel(16);
+        let (cancel_tx, _cancel_rx) = mpsc::channel(16);
+        let mut engine = BracketEngine::new(order_tx, cancel_tx);
+
+        // Buy entry → sell legs
+        let bracket = make_bracket(OrderSide::Buy, 900.0, 970.0, 865.0);
+        let _id = engine.submit(bracket).await.unwrap();
+        let _ = order_rx.recv().await; // entry
+        engine.on_fill(&"entry-001".to_string(), 900.0).await;
+
+        let tp_order = order_rx.recv().await.unwrap();
+        let sl_order = order_rx.recv().await.unwrap();
+        assert_eq!(tp_order.side, OrderSide::Sell, "TP of Buy entry should be Sell");
+        assert_eq!(sl_order.side, OrderSide::Sell, "SL of Buy entry should be Sell");
+    }
+
+    /// For a LONG bracket: stop-loss must be below entry, take-profit above.
+    /// This invariant violation is the canonical "max-loss instead of max-protection" bug.
+    #[test]
+    fn test_bracket_long_invariant_sl_below_entry_tp_above() {
+        let entry_price = 900.0;
+        let tp_price = 970.0;
+        let sl_price = 865.0;
+        let bracket = make_bracket(OrderSide::Buy, entry_price, tp_price, sl_price);
+        assert!(bracket.stop_loss.price < entry_price,
+            "LONG bracket: SL ({}) must be BELOW entry ({})", bracket.stop_loss.price, entry_price);
+        assert!(bracket.take_profit.price > entry_price,
+            "LONG bracket: TP ({}) must be ABOVE entry ({})", bracket.take_profit.price, entry_price);
+    }
+
+    /// For a SHORT bracket: stop-loss must be above entry, take-profit below.
+    #[test]
+    fn test_bracket_short_invariant_sl_above_entry_tp_below() {
+        let entry_price = 900.0;
+        let tp_price = 830.0;  // profit target when shorting
+        let sl_price = 935.0;  // stop-loss above entry for short protection
+        let bracket = make_bracket(OrderSide::Sell, entry_price, tp_price, sl_price);
+        assert!(bracket.stop_loss.price > entry_price,
+            "SHORT bracket: SL ({}) must be ABOVE entry ({})", bracket.stop_loss.price, entry_price);
+        assert!(bracket.take_profit.price < entry_price,
+            "SHORT bracket: TP ({}) must be BELOW entry ({})", bracket.take_profit.price, entry_price);
+    }
+}

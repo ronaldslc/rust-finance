@@ -31,7 +31,7 @@ anyhow = "1.0"
 tracing = "0.1"
 
 # HTTP client (for news feed)
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.11", default-features = false, features = ["rustls-tls", "json"] }
 
 [dev-dependencies]
 tokio = { version = "1.35", features = ["test-util"] }

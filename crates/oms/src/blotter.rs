@@ -228,12 +228,13 @@ impl OrderBlotter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::order::OrderStatus;
 
     #[tokio::test]
     async fn test_order_submit_and_retrieve() {
         let blotter = OrderBlotter::new(ComplianceLimits::default());
         let id = blotter
-            .submit("C001", "AAPL", Side::Buy, OrderType::Market, 100.0, TimeInForce::Day)
+            .submit("C001", "AAPL", Side::Buy, OrderType::Limit { price: 150.0 }, 100.0, TimeInForce::Day)
             .await
             .unwrap();
 
@@ -245,8 +246,8 @@ mod tests {
     #[tokio::test]
     async fn test_duplicate_order_rejected() {
         let blotter = OrderBlotter::new(ComplianceLimits::default());
-        blotter.submit("C001", "AAPL", Side::Buy, OrderType::Market, 100.0, TimeInForce::Day).await.unwrap();
-        let result = blotter.submit("C001", "AAPL", Side::Buy, OrderType::Market, 100.0, TimeInForce::Day).await;
+        blotter.submit("C001", "AAPL", Side::Buy, OrderType::Limit { price: 150.0 }, 100.0, TimeInForce::Day).await.unwrap();
+        let result = blotter.submit("C001", "AAPL", Side::Buy, OrderType::Limit { price: 150.0 }, 100.0, TimeInForce::Day).await;
         assert!(matches!(result, Err(ComplianceError::DuplicateOrderId { .. })));
     }
 

@@ -1,4 +1,4 @@
-use pricing::sabr::{SabrParams, implied_vol, SabrCalibrator};
+use pricing::sabr::{SabrParams, implied_vol};
 
 #[test]
 fn test_sabr_atm_implied_vol() {

@@ -51,12 +51,13 @@ impl DigitalTwin {
     pub fn new_large_scale(symbol: &str, initial_price: f64) -> Self {
         let config = SwarmConfig {
             agent_count: 100_000,
-            retail_fraction: 0.65,
+            retail_fraction: 0.53,
             hedge_fund_fraction: 0.08,
             market_maker_fraction: 0.12,
             arbitrage_fraction: 0.10,
             momentum_fraction: 0.03,
             news_trader_fraction: 0.02,
+            contrarian_fraction: 0.12,
             price_impact_lambda: 0.000_005, // smaller lambda for deeper market
             round_delay_ms: 0,
             ..SwarmConfig::default()
@@ -144,7 +145,10 @@ impl DigitalTwin {
             net_flow,
             self.config.price_impact_lambda,
             self.config.round_vol(),
+            self.config.mean_reversion_speed,
             &mut rng,
+            self.config.max_drift_pct,
+            self.config.spread_bps_for(&self.market.symbol),
         );
 
         // ── Flash crash / event detection ─────────────────────────────────
@@ -244,6 +248,7 @@ fn spawn_agents_parallel(config: &SwarmConfig, initial_price: f64) -> Vec<Agent>
                 initial_price,
                 cash_per_agent,
                 config.max_position_usd,
+                (id as u64).wrapping_mul(2654435761),
             )
         })
         .collect()
@@ -251,12 +256,20 @@ fn spawn_agents_parallel(config: &SwarmConfig, initial_price: f64) -> Vec<Agent>
 
 fn assign_type(id: u64, config: &SwarmConfig) -> TraderType {
     let f = id as f64 / config.agent_count as f64;
-    if f < config.retail_fraction { TraderType::Retail }
-    else if f < config.retail_fraction + config.hedge_fund_fraction { TraderType::HedgeFund }
-    else if f < config.retail_fraction + config.hedge_fund_fraction + config.market_maker_fraction { TraderType::MarketMaker }
-    else if f < config.retail_fraction + config.hedge_fund_fraction + config.market_maker_fraction + config.arbitrage_fraction { TraderType::ArbitrageBot }
-    else if f < 1.0 - config.news_trader_fraction { TraderType::MomentumTrader }
-    else { TraderType::NewsTrader }
+    let mut acc = 0.0;
+    acc += config.retail_fraction;
+    if f < acc { return TraderType::Retail; }
+    acc += config.hedge_fund_fraction;
+    if f < acc { return TraderType::HedgeFund; }
+    acc += config.market_maker_fraction;
+    if f < acc { return TraderType::MarketMaker; }
+    acc += config.arbitrage_fraction;
+    if f < acc { return TraderType::ArbitrageBot; }
+    acc += config.momentum_fraction;
+    if f < acc { return TraderType::MomentumTrader; }
+    acc += config.contrarian_fraction;
+    if f < acc { return TraderType::Contrarian; }
+    TraderType::NewsTrader
 }
 
 fn activation_probability(round: u64, config: &SwarmConfig) -> f64 {

@@ -446,7 +446,7 @@ fn draw_top_bar(f: &mut Frame, area: Rect, app: &App) {
     let date = now.format("%b %d").to_string();
 
     let mut spans = vec![
-        Span::styled(" RUSTFORGE ", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
+        Span::styled(" RUST TERMINAL ", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
         Span::styled("│ ", Style::default().fg(BORDER)),
     ];
 
@@ -482,7 +482,7 @@ fn draw_top_bar(f: &mut Frame, area: Rect, app: &App) {
     // Right-aligned clock
     let status_len: usize = spans.iter().map(|s| s.content.len()).sum();
     let clock_str = format!(" {} {} ", date, clock);
-    let padding = area.width as usize - status_len.min(area.width as usize) - clock_str.len();
+    let padding = (area.width as usize).saturating_sub(status_len.min(area.width as usize)).saturating_sub(clock_str.len());
     if padding > 0 {
         spans.push(Span::raw(" ".repeat(padding)));
     }
@@ -611,22 +611,52 @@ fn draw_index_strip(f: &mut Frame, area: Rect) {
 }
 
 fn draw_order_book(f: &mut Frame, area: Rect, app: &App) {
+    let ob_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(area);
+
+    let max_ask: f64 = app.order_book.iter().map(|r| r.ask_total).fold(1.0, f64::max);
+    let max_bid: f64 = app.order_book.iter().map(|r| r.bid_total).fold(1.0, f64::max);
+
     let t_rows: Vec<Row> = app.order_book.iter().map(|row| {
+        let ai = (row.ask_total / max_ask).min(1.0);
+        let bi = (row.bid_total / max_bid).min(1.0);
+        let ask_bg = Color::Rgb((50.0 * ai) as u8, (18.0 * ai) as u8, (18.0 * ai) as u8);
+        let bid_bg = Color::Rgb((18.0 * bi) as u8, (50.0 * bi) as u8, (18.0 * bi) as u8);
         Row::new(vec![
-            Cell::from(Span::styled(format!("${:.2}", row.ask_price), Style::default().fg(RED))),
-            Cell::from(row.ask_size.to_string()),
-            Cell::from(Span::styled(format!("{:.0}M", row.ask_total), Style::default().fg(RED).add_modifier(Modifier::BOLD))),
-            Cell::from(Span::styled(format!("${:.2}", row.bid_price), Style::default().fg(GREEN))),
-            Cell::from(row.bid_size.to_string()),
-            Cell::from(Span::styled(format!("{:.0}M", row.bid_total), Style::default().fg(GREEN).add_modifier(Modifier::BOLD))),
+            Cell::from(Span::styled(format!("${:.2}", row.ask_price), Style::default().fg(RED))).style(Style::default().bg(ask_bg)),
+            Cell::from(row.ask_size.to_string()).style(Style::default().bg(ask_bg)),
+            Cell::from(Span::styled(format!("{:.0}M", row.ask_total), Style::default().fg(RED).add_modifier(Modifier::BOLD))).style(Style::default().bg(ask_bg)),
+            Cell::from(Span::styled(format!("${:.2}", row.bid_price), Style::default().fg(GREEN))).style(Style::default().bg(bid_bg)),
+            Cell::from(row.bid_size.to_string()).style(Style::default().bg(bid_bg)),
+            Cell::from(Span::styled(format!("{:.0}M", row.bid_total), Style::default().fg(GREEN).add_modifier(Modifier::BOLD))).style(Style::default().bg(bid_bg)),
         ])
     }).collect();
 
     let table = Table::new(t_rows, [Constraint::Percentage(16); 6])
         .header(Row::new(vec!["Asks", "Size", "Total", "Bids", "Size", "Total"]).style(Style::default().fg(TEXT_DIM)))
         .block(active_block_with_title(" Order Book ", app.active_panel == 2));
-    
-    f.render_widget(table, area);
+    f.render_widget(table, ob_chunks[0]);
+
+    let (spread, mid, imbal) = if let (Some(first), Some(last)) = (app.order_book.first(), app.order_book.last()) {
+        let s = if last.bid_price > 0.0 { (first.ask_price - last.bid_price) / last.bid_price * 100.0 } else { 0.0 };
+        let m = (first.ask_price + first.bid_price) / 2.0;
+        let ta: f64 = app.order_book.iter().map(|r| r.ask_total).sum();
+        let tb: f64 = app.order_book.iter().map(|r| r.bid_total).sum();
+        let i = if ta + tb > 0.0 { (tb - ta) / (ta + tb) * 100.0 } else { 0.0 };
+        (s, m, i)
+    } else { (0.0, 0.0, 0.0) };
+
+    let summary = Line::from(vec![
+        Span::styled(" Spread ", Style::default().fg(TEXT_DIM)),
+        Span::styled(format!("{:.2}%", spread), Style::default().fg(TEXT_PRIMARY)),
+        Span::styled("      Mid price ", Style::default().fg(TEXT_DIM)),
+        Span::styled(format!("{:.2}", mid), Style::default().fg(TEXT_PRIMARY)),
+        Span::styled("      Buy/Sell imbal ", Style::default().fg(TEXT_DIM)),
+        Span::styled(format!("{:+.0}%", imbal), Style::default().fg(if imbal > 0.0 { GREEN } else { RED })),
+    ]);
+    f.render_widget(Paragraph::new(summary), ob_chunks[1]);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -642,11 +672,10 @@ fn draw_dexter_analyst(f: &mut Frame, area: Rect, app: &App) {
             Span::styled("DEXTER — FINANCIAL ANALYST", Style::default().fg(if app.active_panel == 3 { BLUE } else { TEXT_SECONDARY }))
         ]))
         .style(Style::default().bg(BG));
-        
+
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    // Loading state
     if app.dexter_loading {
         let spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
         let idx = (app.session_start.elapsed().as_millis() / 100) as usize % spinner_frames.len();
@@ -654,7 +683,7 @@ fn draw_dexter_analyst(f: &mut Frame, area: Rect, app: &App) {
             Paragraph::new(vec![
                 Line::from(""),
                 Line::from(Span::styled(
-                    format!("  {} Analyzing {} ...", spinner_frames[idx], app.active_symbol), 
+                    format!("  {} Analyzing {} ...", spinner_frames[idx], app.active_symbol),
                     Style::default().fg(CYAN)
                 )),
             ]),
@@ -663,63 +692,25 @@ fn draw_dexter_analyst(f: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    let rec = app.dexter_recommendation.as_deref().unwrap_or("—");
-    let rec_color = match rec {
-        "BUY" => GREEN,
-        "SELL" => RED,
-        "RISK" => ORANGE,
-        _ => TEXT_SECONDARY,
-    };
-
-    // Conviction gauge
-    let conf_pct = (app.dexter_confidence * 100.0) as usize;
-    let gauge_filled = conf_pct / 5;
-    let gauge_empty = 20 - gauge_filled.min(20);
-    let gauge_bar = format!("{}{}", "█".repeat(gauge_filled.min(20)), "░".repeat(gauge_empty));
-
-    let gate_text = if app.dexter_safety_gate_pass { "[PASS]" } else { "[BLOCKED]" };
-    let gate_color = if app.dexter_safety_gate_pass { GREEN } else { RED };
-
     let mut text: Vec<Line> = Vec::new();
 
-    // Signal header
-    text.push(Line::from(vec![
-        Span::styled(format!(" ██ {} ██ ", rec), Style::default().fg(Color::Black).bg(rec_color).add_modifier(Modifier::BOLD)),
-        Span::raw("  "),
-        Span::styled(format!("{} @ $322.50", app.active_symbol), Style::default().fg(TEXT_PRIMARY)),
-    ]));
-
-    // Conviction gauge
-    text.push(Line::from(vec![
-        Span::styled(" Conviction: ", Style::default().fg(TEXT_DIM)),
-        Span::styled(&gauge_bar, Style::default().fg(rec_color)),
-        Span::styled(format!(" {}/100", conf_pct), Style::default().fg(TEXT_PRIMARY)),
-    ]));
-
-    // Rationale (abbreviated for panel space)
-    if !app.dexter_rationale.is_empty() {
-        let truncated: String = app.dexter_rationale.chars().take(60).collect();
-        text.push(Line::from(vec![
-            Span::styled(format!(" {}", truncated), Style::default().fg(TEXT_SECONDARY)),
-        ]));
+    // Render valuation output lines
+    for line in &app.dexter_output {
+        text.push(Line::from(Span::styled(
+            format!(" {}", line),
+            Style::default().fg(TEXT_PRIMARY),
+        )));
     }
 
-    // Risk parameters
-    text.push(Line::from(vec![
-        Span::styled(" SL:", Style::default().fg(TEXT_DIM)),
-        Span::styled(format!("{:.1}%", app.dexter_stop_loss_pct), Style::default().fg(RED)),
-        Span::styled("  TP:", Style::default().fg(TEXT_DIM)),
-        Span::styled(format!("{:.1}%", app.dexter_take_profit_pct), Style::default().fg(GREEN)),
-        Span::styled("  Size:", Style::default().fg(TEXT_DIM)),
-        Span::styled(format!("{:.1}%", app.dexter_position_size_pct), Style::default().fg(TEXT_PRIMARY)),
-    ]));
+    text.push(Line::from(""));
 
-    // Safety gate & regime
+    // BUY / RISK / NEUTRAL buttons
     text.push(Line::from(vec![
-        Span::styled(" Gate: ", Style::default().fg(TEXT_DIM)),
-        Span::styled(gate_text, Style::default().fg(gate_color)),
-        Span::styled("  Regime: ", Style::default().fg(TEXT_DIM)),
-        Span::styled(&app.dexter_regime, Style::default().fg(AMBER)),
+        Span::styled(" BUY ", Style::default().fg(Color::Black).bg(GREEN).add_modifier(Modifier::BOLD)),
+        Span::raw("  "),
+        Span::styled(" RISK ", Style::default().fg(Color::Black).bg(RED).add_modifier(Modifier::BOLD)),
+        Span::raw("  "),
+        Span::styled(" NEUTRAL ", Style::default().fg(Color::Black).bg(AMBER).add_modifier(Modifier::BOLD)),
     ]));
 
     f.render_widget(Paragraph::new(text), inner);
@@ -819,22 +810,17 @@ fn draw_mirofish_sim(f: &mut Frame, area: Rect, app: &App) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 fn draw_order_entry(f: &mut Frame, area: Rect, app: &App) {
-    let mode_indicator = if app.paper_mode {
-        Span::styled(" PAPER ", Style::default().fg(Color::Black).bg(BLUE).add_modifier(Modifier::BOLD))
-    } else {
-        Span::styled(" LIVE ", Style::default().fg(Color::Black).bg(RED).add_modifier(Modifier::BOLD))
-    };
+    let price = app.watchlist.first().map(|w| w.price).unwrap_or(20.0);
 
     let text = Line::from(vec![
-        mode_indicator,
-        Span::raw("  Symbol "),
+        Span::styled(" Symbol ", Style::default().fg(TEXT_DIM)),
         Span::styled(format!(" {} ", app.active_symbol), Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::REVERSED)),
-        Span::raw("   Quantity "),
-        Span::styled(" 1     ", Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::REVERSED)),
-        Span::raw("   Price "),
-        Span::styled(" $20.00 ", Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::REVERSED)),
-        Span::raw("   "),
-        Span::styled("LMT / MKT / STP / IOC   ", Style::default().fg(TEXT_DIM)),
+        Span::styled("  Qty ", Style::default().fg(TEXT_DIM)),
+        Span::styled(" 1 ", Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::REVERSED)),
+        Span::styled("  Price ", Style::default().fg(TEXT_DIM)),
+        Span::styled(format!(" ${:.2} ", price), Style::default().fg(TEXT_PRIMARY).add_modifier(Modifier::REVERSED)),
+        Span::raw("  "),
+        Span::styled("LMT/MKT/STP/IOC ", Style::default().fg(TEXT_DIM)),
         Span::styled(" BUY ", Style::default().fg(Color::Black).bg(GREEN).add_modifier(Modifier::BOLD)),
         Span::raw(" "),
         Span::styled(" SELL ", Style::default().fg(Color::White).bg(RED).add_modifier(Modifier::BOLD)),
@@ -891,11 +877,11 @@ fn draw_day_pnl(f: &mut Frame, area: Rect, app: &App) {
     let color = if app.day_pnl >= 0.0 { GREEN } else { RED };
     let text = vec![
         Line::from(vec![
-            Span::styled(" Day P&L:           ", Style::default().fg(TEXT_DIM)), 
+            Span::styled(" Day P&L:        ", Style::default().fg(TEXT_DIM)), 
             Span::styled(format!("${:.2}K", app.day_pnl), Style::default().fg(color).add_modifier(Modifier::BOLD)),
         ]),
         Line::from(vec![
-            Span::styled(" Available power:  ", Style::default().fg(TEXT_DIM)), 
+            Span::styled(" Buying power:   ", Style::default().fg(TEXT_DIM)), 
             Span::raw(format!("{:.1}B", app.available_power)),
         ]),
     ];

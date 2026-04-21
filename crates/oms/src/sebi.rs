@@ -252,9 +252,16 @@ mod tests {
     use chrono::TimeZone;
 
     fn utc_time(hour: u32, minute: u32) -> DateTime<Utc> {
-        // Convert IST to UTC: IST = UTC+5:30
-        let h = if hour >= 6 { hour - 6 } else { hour + 18 };
-        Utc.with_ymd_and_hms(2024, 1, 15, h, minute, 0).unwrap()
+        // Convert IST to UTC: IST = UTC+5:30, so subtract 5h30m
+        let total_ist_minutes = hour * 60 + minute;
+        let total_utc_minutes = if total_ist_minutes >= 330 {
+            total_ist_minutes - 330
+        } else {
+            total_ist_minutes + 1440 - 330 // wrap to previous day
+        };
+        let utc_h = total_utc_minutes / 60;
+        let utc_m = total_utc_minutes % 60;
+        Utc.with_ymd_and_hms(2024, 1, 15, utc_h, utc_m, 0).unwrap()
     }
 
     #[test]

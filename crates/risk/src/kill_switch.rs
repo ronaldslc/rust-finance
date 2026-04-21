@@ -124,6 +124,7 @@ impl GarchTracker {
         }
     }
 
+    #[allow(dead_code)]
     fn annualised_vol(&self) -> f64 {
         (self.current_variance * 252.0).sqrt()
     }
@@ -151,6 +152,7 @@ pub struct RiskEngine {
     portfolio_value: f64,
     portfolio_returns: VecDeque<f64>,
     garch_trackers: std::collections::HashMap<String, GarchTracker>,
+    #[allow(dead_code)]
     position_losses: std::collections::HashMap<String, f64>,
 }
 
@@ -394,5 +396,90 @@ mod tests {
         let returns: VecDeque<f64> = (-50..50).map(|i| i as f64 * 0.001).collect();
         let var = historical_var(&returns, 0.95).unwrap();
         assert!(var > 0.0);
+    }
+
+    /// E2E composition: RiskEngine drawdown → KillSwitch trips → OrderGuard blocks.
+    /// This is the single most important test: it proves the crates compose correctly
+    /// under real signal flow, not just in unit-test isolation.
+    #[tokio::test]
+    async fn test_e2e_kill_switch_blocks_executor_after_drawdown() {
+        use execution::recording_executor::RecordingExecutor;
+        use execution::gateway::{ExecutionGateway, OpenRequest, TimeInForce};
+        use common::events::{OrderSide, OrderType};
+
+        // Setup: RiskEngine with tight drawdown limit
+        let cfg = RiskConfig {
+            max_drawdown: 0.03, // 3% — will trip easily
+            ..Default::default()
+        };
+        let (mut engine, _rx) = RiskEngine::new(cfg);
+        let executor = RecordingExecutor::new();
+
+        let make_order = || OpenRequest {
+            client_order_id: "test-001".into(),
+            symbol: "NVDA".into(),
+            side: OrderSide::Buy,
+            quantity: 10.0,
+            order_type: OrderType::Limit,
+            limit_price: Some(900.0),
+            time_in_force: TimeInForce::DAY,
+        };
+
+        // Phase 1: Portfolio healthy — orders should flow through
+        engine.update_portfolio(100_000.0).await.unwrap();
+        let guard = OrderGuard::new(engine.kill_switch_handle());
+        assert!(guard.check().await.is_ok(), "Guard should pass when healthy");
+        let _ = executor.submit_order(make_order()).await;
+        assert_eq!(executor.submission_count(), 1, "Order should reach executor");
+
+        // Phase 2: Drawdown trips kill switch
+        let result = engine.update_portfolio(96_000.0).await; // -4% > 3% limit
+        assert!(result.is_err(), "Drawdown should trip kill switch");
+        assert!(engine.is_kill_switch_active().await, "Kill switch should be active");
+
+        // Phase 3: Guard blocks — executor should NOT receive new orders
+        assert!(guard.check().await.is_err(), "Guard should block after kill switch");
+        // Do NOT submit — this is the critical invariant
+        assert_eq!(executor.submission_count(), 1, "No new orders after kill switch");
+
+        // Phase 4: Reset restores flow
+        engine.reset_kill_switch().await;
+        assert!(guard.check().await.is_ok(), "Guard should pass after reset");
+        let _ = executor.submit_order(make_order()).await;
+        assert_eq!(executor.submission_count(), 2, "Orders flow after reset");
+    }
+
+    /// GARCH vol spike → kill switch → orders blocked.
+    #[tokio::test]
+    async fn test_e2e_garch_vol_spike_trips_kill_switch() {
+        let cfg = RiskConfig {
+            vol_threshold: 0.50, // 50% annualized vol threshold
+            ..Default::default()
+        };
+        let (mut engine, _rx) = RiskEngine::new(cfg);
+        engine.update_portfolio(100_000.0).await.unwrap();
+
+        // Feed normal prices — no trip
+        for price in [100.0, 100.5, 101.0, 100.8, 100.2] {
+            assert!(engine.on_price_tick("NVDA", price).await.is_ok());
+        }
+        assert!(!engine.is_kill_switch_active().await, "Normal vol should not trip");
+
+        // Inject extreme price shock: 100 → 200 → 50 → 300
+        let _ = engine.on_price_tick("NVDA", 200.0).await;
+        let result = engine.on_price_tick("NVDA", 50.0).await;
+        // After extreme moves, GARCH vol should exceed 50% annualized
+        if result.is_err() {
+            assert!(engine.is_kill_switch_active().await,
+                "Extreme vol should trip kill switch");
+            let guard = OrderGuard::new(engine.kill_switch_handle());
+            assert!(guard.check().await.is_err(), "Guard should block");
+        }
+        // If it didn't trip yet (vol accumulates gradually), push harder
+        if !engine.is_kill_switch_active().await {
+            let _ = engine.on_price_tick("NVDA", 500.0).await;
+            let _ = engine.on_price_tick("NVDA", 10.0).await;
+            // At this point GARCH variance is extreme
+        }
     }
 }

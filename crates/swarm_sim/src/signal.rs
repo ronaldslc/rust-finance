@@ -60,21 +60,64 @@ impl SwarmSignal {
 
         let regime = detect_regime(market, net_flow_usd);
 
-        let momentum_aligned = match &direction {
-            SignalDirection::Long => market.momentum_1h > 0.0,
-            SignalDirection::Short => market.momentum_1h < 0.0,
-            SignalDirection::Neutral => true,
-        };
-        let regime_aligned = match (&direction, &regime) {
-            (SignalDirection::Long, MarketRegime::Trending) | (SignalDirection::Short, MarketRegime::Trending) => true,
-            (_, MarketRegime::HighVolatility) => false,
-            _ => true,
+        // ── Calibrated confidence (v3.0) ─────────────────────────────────────
+        // Multi-factor weighted formula with anti-herding and RSI penalties.
+        // Produces 35%–92%, never 100%, never below 35%.
+        //
+        // Factor 1: Agent agreement (30%) — with anti-herding penalty
+        //   Too-uniform agreement (>95%) is suspicious (likely herding).
+        //   margin=0.0 (50/50 split) → 0.0, margin=0.5 (75/25) → high
+        let raw_agreement = (margin / 0.50).min(1.0);
+        let agreement_score = if raw_agreement > 0.95 {
+            0.7 // suspiciously uniform — penalize
+        } else if raw_agreement > 0.80 {
+            raw_agreement * 0.95
+        } else if raw_agreement > 0.55 {
+            raw_agreement * 0.9
+        } else {
+            raw_agreement * 0.7 // weak consensus
         };
 
-        let mut confidence = margin * 2.0;
-        if momentum_aligned { confidence += 0.15; }
-        if regime_aligned { confidence += 0.10; }
-        confidence = confidence.min(1.0);
+        // Factor 2: Flow strength (20%) — direction consistency + magnitude
+        let recent_flows: Vec<f64> = market.flow_history.iter().cloned().collect();
+        let flow_consistency = if recent_flows.len() >= 5 {
+            let positive = recent_flows.iter().filter(|&&f| f > 0.0).count();
+            let negative = recent_flows.iter().filter(|&&f| f < 0.0).count();
+            let dominant = positive.max(negative) as f64;
+            dominant / recent_flows.len() as f64
+        } else {
+            0.5
+        };
+        let flow_magnitude = (net_flow_usd.abs() / (market.liquidity_usd * 0.001)).min(1.0);
+        let flow_score = 0.6 * flow_consistency + 0.4 * flow_magnitude;
+
+        // Factor 3: Drift stability (15%) — lower drift = more trustworthy
+        let drift_score = (1.0 - (market.cumulative_drift_pct.abs() / 5.0)).clamp(0.0, 1.0);
+
+        // Factor 4: Volatility penalty (15%) — high vol = less certain
+        let vol_ann = market.volatility_realized * (252_f64).sqrt();
+        let vol_score = (1.0 - vol_ann.min(1.0)).max(0.2);
+
+        // Factor 5: RSI mean-reversion penalty (20%) — NEW
+        //   Extreme RSI reduces confidence in trend continuation.
+        //   RSI near 50 = neutral (highest score). RSI > 70 or < 30 = penalized.
+        let rsi = market.rsi_14();
+        let rsi_score = if rsi > 70.0 || rsi < 30.0 {
+            0.5 // overbought/oversold = lower confidence in trend continuation
+        } else if rsi > 60.0 || rsi < 40.0 {
+            0.7 // mild extremes
+        } else {
+            0.8 + (50.0 - (rsi - 50.0).abs()) / 250.0 // near 50 = best
+        };
+
+        let raw_confidence = 0.30 * agreement_score
+                           + 0.20 * flow_score
+                           + 0.15 * drift_score
+                           + 0.15 * vol_score
+                           + 0.20 * rsi_score;
+
+        // Clamp to [0.35, 0.92] — never 100%, never below 35%
+        let confidence = raw_confidence.clamp(0.35, 0.92);
 
         SwarmSignal {
             round,

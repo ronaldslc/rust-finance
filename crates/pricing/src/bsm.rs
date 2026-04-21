@@ -98,3 +98,136 @@ pub fn implied_vol(market_price: f64, spot: f64, strike: f64, rate: f64, div_yie
     }
     Some(sigma.max(0.0001))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hull_params() -> BsmParams {
+        // Hull's Options Tables: S=42, K=40, r=0.10, q=0, σ=0.20, T=0.50
+        BsmParams {
+            spot: 42.0,
+            strike: 40.0,
+            rate: 0.10,
+            dividend_yield: 0.0,
+            volatility: 0.20,
+            time_to_expiry: 0.50,
+        }
+    }
+
+    /// Cross-check against Hull's Table 15.6 reference values.
+    #[test]
+    fn test_bsm_ref_values_hull() {
+        let res = price(&hull_params()).unwrap();
+        // Call price ≈ 4.76 (Hull value)
+        assert!((res.call_price - 4.76).abs() < 0.02,
+            "Call price: expected ~4.76, got {:.4}", res.call_price);
+        // Call delta ≈ 0.7791
+        assert!((res.call_delta - 0.7791).abs() < 0.005,
+            "Call delta: expected ~0.7791, got {:.4}", res.call_delta);
+        // Gamma = n(d1) / (S·σ·√T) ≈ 0.0497 for Hull params
+        assert!((res.gamma - 0.0497).abs() < 0.002,
+            "Gamma: expected ~0.0497, got {:.4}", res.gamma);
+    }
+
+    /// Put-call parity: C - P = Se^{-qT} - Ke^{-rT}
+    #[test]
+    fn test_bsm_put_call_parity() {
+        let p = hull_params();
+        let res = price(&p).unwrap();
+        let lhs = res.call_price - res.put_price;
+        let rhs = p.spot * (-p.dividend_yield * p.time_to_expiry).exp()
+            - p.strike * (-p.rate * p.time_to_expiry).exp();
+        assert!((lhs - rhs).abs() < 1e-8,
+            "Put-call parity violated: C-P={:.8}, S*exp(-qT)-K*exp(-rT)={:.8}", lhs, rhs);
+    }
+
+    /// Call delta ∈ [0, 1], put delta ∈ [-1, 0].
+    #[test]
+    fn test_bsm_delta_bounds() {
+        for &spot in &[30.0, 40.0, 50.0, 60.0] {
+            let p = BsmParams { spot, ..hull_params() };
+            let res = price(&p).unwrap();
+            assert!(res.call_delta >= 0.0 && res.call_delta <= 1.0,
+                "Call delta out of [0,1]: {} for spot={}", res.call_delta, spot);
+            assert!(res.put_delta >= -1.0 && res.put_delta <= 0.0,
+                "Put delta out of [-1,0]: {} for spot={}", res.put_delta, spot);
+        }
+    }
+
+    /// Gamma must always be positive for a live option.
+    #[test]
+    fn test_bsm_gamma_always_positive() {
+        for &spot in &[30.0, 40.0, 50.0, 60.0] {
+            let p = BsmParams { spot, ..hull_params() };
+            let res = price(&p).unwrap();
+            assert!(res.gamma > 0.0, "Gamma must be > 0: got {} for spot={}", res.gamma, spot);
+        }
+    }
+
+    /// Vega must always be positive for a live option.
+    #[test]
+    fn test_bsm_vega_always_positive() {
+        for &spot in &[30.0, 40.0, 50.0, 60.0] {
+            let p = BsmParams { spot, ..hull_params() };
+            let res = price(&p).unwrap();
+            assert!(res.vega > 0.0, "Vega must be > 0: got {} for spot={}", res.vega, spot);
+        }
+    }
+
+    /// ATM (S≈K) call delta should be approximately 0.5.
+    #[test]
+    fn test_bsm_atm_delta_near_half() {
+        // True ATM requires r=0, q=0 so d1 = σ√T/2 → small → N(d1) ≈ 0.5
+        let p = BsmParams {
+            spot: 100.0, strike: 100.0, rate: 0.0,
+            dividend_yield: 0.0, volatility: 0.20, time_to_expiry: 1.0,
+        };
+        let res = price(&p).unwrap();
+        // d1 = σ√T/2 = 0.10, N(0.10) ≈ 0.5398
+        assert!((res.call_delta - 0.5).abs() < 0.06,
+            "ATM call delta should be ~0.5, got {:.4}", res.call_delta);
+
+        // With r>0, delta drifts above 0.5 due to forward price effect
+        let p_fwd = BsmParams { rate: 0.05, ..p };
+        let res_fwd = price(&p_fwd).unwrap();
+        assert!(res_fwd.call_delta > res.call_delta,
+            "Positive rate should push call delta above the r=0 case");
+    }
+
+    /// price() returns None when T ≤ 0 or vol ≤ 0.
+    #[test]
+    fn test_bsm_expired_option() {
+        let p = BsmParams { time_to_expiry: 0.0, ..hull_params() };
+        assert!(price(&p).is_none(), "Expired option should return None");
+        let p2 = BsmParams { volatility: 0.0, ..hull_params() };
+        assert!(price(&p2).is_none(), "Zero vol should return None");
+        let p3 = BsmParams { time_to_expiry: -1.0, ..hull_params() };
+        assert!(price(&p3).is_none(), "Negative T should return None");
+    }
+
+    /// Compute BSM price from known vol, recover via implied_vol, assert roundtrip.
+    #[test]
+    fn test_implied_vol_roundtrip() {
+        let known_vol = 0.25;
+        let p = BsmParams {
+            spot: 100.0, strike: 105.0, rate: 0.05,
+            dividend_yield: 0.0, volatility: known_vol, time_to_expiry: 0.50,
+        };
+        let res = price(&p).unwrap();
+        let recovered = implied_vol(
+            res.call_price, p.spot, p.strike, p.rate, p.dividend_yield,
+            p.time_to_expiry, true, 100, 1e-10,
+        ).unwrap();
+        assert!((recovered - known_vol).abs() < 0.001,
+            "Implied vol roundtrip: expected {}, got {}", known_vol, recovered);
+    }
+
+    /// Ensure vanna and charm are finite and reasonable.
+    #[test]
+    fn test_bsm_second_order_greeks() {
+        let res = price(&hull_params()).unwrap();
+        assert!(res.vanna.is_finite(), "Vanna should be finite");
+        assert!(res.charm.is_finite(), "Charm should be finite");
+    }
+}

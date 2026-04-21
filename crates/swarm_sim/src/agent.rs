@@ -1,4 +1,5 @@
 use rand::Rng;
+use rand::SeedableRng;
 use rand_distr::{Distribution, Normal};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -15,6 +16,10 @@ pub enum TraderType {
     ArbitrageBot,
     MomentumTrader,
     NewsTrader,
+    /// Contrarian agents invert the majority signal.
+    /// They buy when others sell and sell when others buy,
+    /// providing adversarial tension that prevents herding.
+    Contrarian,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,10 +61,14 @@ pub struct AgentState {
     pub fair_value_estimate: f64,
     pub current_sentiment: f64,
     pub loss_streak: u32,
+    /// Per-agent perception noise — each agent perceives prices slightly
+    /// differently, preventing uniform convergence. Sampled from N(0, 0.005)
+    /// at initialization time.
+    pub perception_noise: f64,
 }
 
 impl AgentState {
-    pub fn new(agent_id: AgentId, trader_type: TraderType, initial_price: f64, cash: f64) -> Self {
+    pub fn new(agent_id: AgentId, trader_type: TraderType, initial_price: f64, cash: f64, seed: u64) -> Self {
         let memory_size = match trader_type {
             TraderType::Retail => 5,
             TraderType::HedgeFund => 100,
@@ -67,14 +76,18 @@ impl AgentState {
             TraderType::ArbitrageBot => 3,
             TraderType::MomentumTrader => 50,
             TraderType::NewsTrader => 10,
+            TraderType::Contrarian => 30,
         };
 
         let mut price_memory = VecDeque::with_capacity(memory_size + 1);
         price_memory.push_back(initial_price);
 
-        let fair_value = {
-            let mut rng = rand::thread_rng();
-            initial_price * (1.0 + rng.gen_range(-0.10..0.10))
+        let (fair_value, perception_noise) = {
+            let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
+            let fv = initial_price * (1.0 + rng.gen_range(-0.10..0.10));
+            // Perception noise: different agents see slightly different prices
+            let noise = rng.gen_range(-0.005..0.005);
+            (fv, noise)
         };
 
         Self {
@@ -90,6 +103,7 @@ impl AgentState {
             fair_value_estimate: fair_value,
             current_sentiment: 0.0,
             loss_streak: 0,
+            perception_noise,
         }
     }
 
@@ -129,6 +143,7 @@ impl AgentState {
             TraderType::ArbitrageBot => 3,
             TraderType::MomentumTrader => 50,
             TraderType::NewsTrader => 10,
+            TraderType::Contrarian => 30,
         }
     }
 
@@ -144,16 +159,48 @@ impl AgentState {
 pub struct Agent {
     pub state: AgentState,
     max_position_usd: f64,
+    /// Max flow any single agent can deploy per round (USD).
+    max_deploy_per_round: f64,
+    /// Inventory decay rate per round. Position *= (1 - decay) each round.
+    inventory_decay_rate: f64,
 }
 
 impl Agent {
-    pub fn new(id: AgentId, trader_type: TraderType, initial_price: f64, cash: f64, max_position_usd: f64) -> Self {
-        Self { state: AgentState::new(id, trader_type, initial_price, cash), max_position_usd }
+    pub fn new(id: AgentId, trader_type: TraderType, initial_price: f64, cash: f64, max_position_usd: f64, seed: u64) -> Self {
+        Self {
+            state: AgentState::new(id, trader_type, initial_price, cash, seed),
+            max_position_usd,
+            max_deploy_per_round: 500.0,        // default, overridden by config
+            inventory_decay_rate: 0.005,         // default 0.5%/round
+        }
+    }
+
+    /// Create with explicit v2.1 calibration parameters.
+    pub fn new_calibrated(
+        id: AgentId, trader_type: TraderType, initial_price: f64,
+        cash: f64, max_position_usd: f64, seed: u64,
+        max_deploy_per_round: f64, inventory_decay_rate: f64,
+    ) -> Self {
+        Self {
+            state: AgentState::new(id, trader_type, initial_price, cash, seed),
+            max_position_usd,
+            max_deploy_per_round,
+            inventory_decay_rate,
+        }
     }
 
     pub fn decide(&mut self, market: &MarketState, rng: &mut impl Rng) -> AgentAction {
-        self.state.observe_price(market.mid_price);
+        // Apply perception noise — each agent sees a slightly different price
+        let perceived_price = market.mid_price * (1.0 + self.state.perception_noise);
+        self.state.observe_price(perceived_price);
         self.state.update_pnl(market.mid_price);
+
+        // ── v2.1: Inventory decay — shed position slowly each round ──
+        if self.inventory_decay_rate > 0.0 && self.state.position_usd.abs() > 1.0 {
+            let decay_amount = self.state.position_usd * self.inventory_decay_rate;
+            self.state.position_usd -= decay_amount;
+            self.state.cash += decay_amount.abs();
+        }
 
         if self.state.position_usd.abs() > self.max_position_usd * 1.5 {
             let notional = self.state.position_usd.abs() * 0.5;
@@ -165,13 +212,31 @@ impl Agent {
             };
         }
 
-        match &self.state.trader_type {
+        let action = match &self.state.trader_type {
             TraderType::Retail => self.decide_retail(market, rng),
             TraderType::HedgeFund => self.decide_hedge_fund(market, rng),
             TraderType::MarketMaker => self.decide_market_maker(market, rng),
             TraderType::ArbitrageBot => self.decide_arb_bot(market, rng),
             TraderType::MomentumTrader => self.decide_momentum(market, rng),
             TraderType::NewsTrader => self.decide_news_trader(market, rng),
+            TraderType::Contrarian => self.decide_contrarian(market, rng),
+        };
+
+        // ── v2.1: Cap per-round deploy — prevents buy avalanche ──
+        self.cap_notional(action)
+    }
+
+    /// Clamp notional_usd on Buy/Sell actions to max_deploy_per_round.
+    fn cap_notional(&self, action: AgentAction) -> AgentAction {
+        let cap = self.max_deploy_per_round;
+        match action {
+            AgentAction::Buy { agent_id, notional_usd, limit_price, reason } => {
+                AgentAction::Buy { agent_id, notional_usd: notional_usd.min(cap), limit_price, reason }
+            }
+            AgentAction::Sell { agent_id, notional_usd, limit_price, reason } => {
+                AgentAction::Sell { agent_id, notional_usd: notional_usd.min(cap), limit_price, reason }
+            }
+            other => other,
         }
     }
 
@@ -289,6 +354,49 @@ impl Agent {
             AgentAction::Buy { agent_id: id, notional_usd: size, limit_price: Some(market.ask * 1.005), reason: ActionReason::NewsShock { sentiment } }
         } else {
             AgentAction::Sell { agent_id: id, notional_usd: size.min(self.state.position_usd.abs().max(size)), limit_price: Some(market.bid * 0.995), reason: ActionReason::NewsShock { sentiment } }
+        }
+    }
+
+    /// Contrarian agents deliberately oppose the majority.
+    /// They buy when momentum is negative (oversold reversion play)
+    /// and sell when momentum is positive (overbought reversion play).
+    /// This provides adversarial tension that prevents herding.
+    fn decide_contrarian(&mut self, market: &MarketState, rng: &mut impl Rng) -> AgentAction {
+        let id = self.state.agent_id;
+
+        // Use perceived momentum (inverted) as the signal
+        let momentum = market.momentum_1h;
+        let strength = momentum.abs();
+
+        // Mean-reversion bias: buy dips, sell rips
+        let size = self.max_position_usd * 0.25 * (strength * 10.0).min(1.0);
+
+        // Only act on medium+ momentum (don't fight noise)
+        if strength < 0.003 || rng.gen_bool(0.4) {
+            return AgentAction::Hold { agent_id: id };
+        }
+
+        // RSI extremes boost contrarian conviction
+        let rsi = market.rsi_14();
+        let rsi_boost = if rsi > 70.0 || rsi < 30.0 { 1.5 } else { 1.0 };
+        let boosted_size = (size * rsi_boost).min(self.max_position_usd * 0.30);
+
+        if momentum > 0.0 {
+            // Market going up → contrarian sells (mean reversion)
+            AgentAction::Sell {
+                agent_id: id,
+                notional_usd: boosted_size.min(self.state.position_usd.abs().max(boosted_size)),
+                limit_price: Some(market.bid * 0.999),
+                reason: ActionReason::MeanReversion { fair_value: self.state.fair_value_estimate, current: market.mid_price },
+            }
+        } else {
+            // Market going down → contrarian buys
+            AgentAction::Buy {
+                agent_id: id,
+                notional_usd: boosted_size,
+                limit_price: Some(market.ask * 1.001),
+                reason: ActionReason::MeanReversion { fair_value: self.state.fair_value_estimate, current: market.mid_price },
+            }
         }
     }
 }

@@ -3,5 +3,7 @@
 
 pub mod bootstrap;
 pub mod engine;
+#[allow(unused_imports, dead_code)]
+pub mod hybrid_pipeline;
 pub mod processor;
 pub mod strategy;

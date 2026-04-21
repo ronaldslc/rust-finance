@@ -302,3 +302,239 @@ pub enum ControlCommand {
     AdjustRisk { delta: f64 },
     Shutdown,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: postcard roundtrip
+    fn roundtrip_bot_event(event: &BotEvent) {
+        let bytes = postcard::to_allocvec(event).expect("serialize failed");
+        let decoded: BotEvent = postcard::from_bytes(&bytes).expect("deserialize failed");
+        // Verify field-level equality via debug strings (BotEvent doesn't derive PartialEq)
+        assert_eq!(format!("{:?}", event), format!("{:?}", decoded));
+    }
+
+    fn roundtrip_control(cmd: &ControlCommand) {
+        let bytes = postcard::to_allocvec(cmd).expect("serialize failed");
+        let decoded: ControlCommand = postcard::from_bytes(&bytes).expect("deserialize failed");
+        assert_eq!(format!("{:?}", cmd), format!("{:?}", decoded));
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_market_event() {
+        roundtrip_bot_event(&BotEvent::MarketEvent {
+            symbol: "NVDA".into(),
+            price: 912.50,
+            volume: Some(1_500_000.0),
+            event_type: "trade".into(),
+        });
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_market_event_no_volume() {
+        roundtrip_bot_event(&BotEvent::MarketEvent {
+            symbol: "AAPL".into(),
+            price: 178.25,
+            volume: None,
+            event_type: "bar".into(),
+        });
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_quote_event() {
+        roundtrip_bot_event(&BotEvent::QuoteEvent {
+            symbol: "TSLA".into(),
+            bid_price: 180.00,
+            bid_size: 500,
+            ask_price: 180.05,
+            ask_size: 300,
+        });
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_feed() {
+        roundtrip_bot_event(&BotEvent::Feed("raw_message_payload_bytes".into()));
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_ai_signal() {
+        roundtrip_bot_event(&BotEvent::AISignal {
+            symbol: "NVDA".into(),
+            action: "BUY".into(),
+            confidence: 0.87,
+            reason: "GARCH vol below threshold, swarm 72% bullish".into(),
+        });
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_position_update() {
+        roundtrip_bot_event(&BotEvent::PositionUpdate {
+            token: "SOL".into(),
+            size: 42.5,
+        });
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_wallet_update() {
+        roundtrip_bot_event(&BotEvent::WalletUpdate { sol_balance: 98.123456 });
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_exchange_heartbeat() {
+        roundtrip_bot_event(&BotEvent::ExchangeHeartbeat {
+            exchange: "Alpaca".into(),
+            status: "connected".into(),
+            latency_ms: 12.5,
+        });
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_trade_signal() {
+        roundtrip_bot_event(&BotEvent::TradeSignal("BUY NVDA 0.04 conf=0.82".into()));
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_heartbeat() {
+        roundtrip_bot_event(&BotEvent::Heartbeat);
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_all_control_commands() {
+        roundtrip_control(&ControlCommand::Pause);
+        roundtrip_control(&ControlCommand::Resume);
+        roundtrip_control(&ControlCommand::KillSwitch);
+        roundtrip_control(&ControlCommand::ToggleMode);
+        roundtrip_control(&ControlCommand::CloseAllPositions);
+        roundtrip_control(&ControlCommand::AdjustRisk { delta: -0.25 });
+        roundtrip_control(&ControlCommand::Shutdown);
+    }
+
+    #[test]
+    fn test_postcard_roundtrip_extreme_values() {
+        // Test with edge-case float values
+        roundtrip_bot_event(&BotEvent::MarketEvent {
+            symbol: "".into(), // empty symbol
+            price: f64::MAX,
+            volume: Some(f64::MIN_POSITIVE),
+            event_type: "edge".into(),
+        });
+        roundtrip_bot_event(&BotEvent::WalletUpdate { sol_balance: 0.0 });
+        roundtrip_bot_event(&BotEvent::QuoteEvent {
+            symbol: "X".into(),
+            bid_price: 0.0001,
+            bid_size: u64::MAX,
+            ask_price: 999999.99,
+            ask_size: 0,
+        });
+    }
+
+    #[test]
+    fn test_postcard_deterministic_encoding() {
+        let event = BotEvent::AISignal {
+            symbol: "NVDA".into(),
+            action: "BUY".into(),
+            confidence: 0.75,
+            reason: "test".into(),
+        };
+        let bytes1 = postcard::to_allocvec(&event).unwrap();
+        let bytes2 = postcard::to_allocvec(&event).unwrap();
+        assert_eq!(bytes1, bytes2, "Postcard encoding must be deterministic");
+    }
+
+    /// Malformed bytes must return Err, never panic.
+    /// This is critical for a binary protocol on a TCP socket — flaky networks
+    /// or version mismatches produce garbage frames.
+    #[test]
+    fn test_postcard_malformed_bytes_dont_panic() {
+        // Completely random garbage
+        let garbage: &[u8] = &[0xFF, 0x00, 0xDE, 0xAD, 0xBE, 0xEF, 0x42];
+        let result = postcard::from_bytes::<BotEvent>(garbage);
+        assert!(result.is_err(), "Garbage bytes must return Err");
+
+        // Empty payload
+        let empty: &[u8] = &[];
+        let result = postcard::from_bytes::<BotEvent>(empty);
+        assert!(result.is_err(), "Empty bytes must return Err");
+
+        // Truncated valid-looking payload (valid variant tag, but not enough data)
+        let truncated: &[u8] = &[0x00, 0x04]; // MarketEvent variant with partial data
+        let result = postcard::from_bytes::<BotEvent>(truncated);
+        assert!(result.is_err(), "Truncated bytes must return Err");
+
+        // All-zeros
+        let zeros: &[u8] = &[0x00; 64];
+        let result = postcard::from_bytes::<BotEvent>(zeros);
+        // May succeed or fail — the point is it doesn't panic
+        let _ = result;
+
+        // Repeated variant for ControlCommand
+        let garbage_cmd: &[u8] = &[0xFF, 0xFF, 0xFF, 0xFF];
+        let result = postcard::from_bytes::<ControlCommand>(garbage_cmd);
+        assert!(result.is_err(), "Invalid variant tag must return Err");
+    }
+
+    /// Verify postcard handles the full spectrum of Option<f64> values correctly.
+    /// Optional fields and edge-case floats are where Postcard is most likely to silently mishandle.
+    #[test]
+    fn test_postcard_optional_field_edge_cases() {
+        // volume = Some(0.0) — edge case float
+        roundtrip_bot_event(&BotEvent::MarketEvent {
+            symbol: "AAPL".into(),
+            price: 150.0,
+            volume: Some(0.0),
+            event_type: "trade".into(),
+        });
+
+        // volume = Some(f64::INFINITY)
+        roundtrip_bot_event(&BotEvent::MarketEvent {
+            symbol: "AAPL".into(),
+            price: 150.0,
+            volume: Some(f64::INFINITY),
+            event_type: "trade".into(),
+        });
+
+        // volume = Some(f64::NEG_INFINITY)
+        roundtrip_bot_event(&BotEvent::MarketEvent {
+            symbol: "AAPL".into(),
+            price: 150.0,
+            volume: Some(f64::NEG_INFINITY),
+            event_type: "trade".into(),
+        });
+
+        // volume = Some(f64::NAN) — NaN != NaN, so compare via is_nan
+        let event = BotEvent::MarketEvent {
+            symbol: "X".into(),
+            price: 1.0,
+            volume: Some(f64::NAN),
+            event_type: "nan_test".into(),
+        };
+        let bytes = postcard::to_allocvec(&event).expect("NaN serialize");
+        let decoded: BotEvent = postcard::from_bytes(&bytes).expect("NaN deserialize");
+        if let BotEvent::MarketEvent { volume: Some(v), .. } = decoded {
+            assert!(v.is_nan(), "NaN should survive roundtrip");
+        } else {
+            panic!("Wrong variant after roundtrip");
+        }
+    }
+
+    /// Test all BotEvent variants in a single sweep to ensure nothing is missed.
+    #[test]
+    fn test_postcard_roundtrip_all_variants_exhaustive() {
+        let variants: Vec<BotEvent> = vec![
+            BotEvent::MarketEvent { symbol: "A".into(), price: 1.0, volume: None, event_type: "t".into() },
+            BotEvent::QuoteEvent { symbol: "B".into(), bid_price: 1.0, bid_size: 1, ask_price: 2.0, ask_size: 2 },
+            BotEvent::Feed("raw".into()),
+            BotEvent::AISignal { symbol: "C".into(), action: "BUY".into(), confidence: 0.5, reason: "r".into() },
+            BotEvent::PositionUpdate { token: "SOL".into(), size: 1.0 },
+            BotEvent::WalletUpdate { sol_balance: 0.0 },
+            BotEvent::ExchangeHeartbeat { exchange: "E".into(), status: "ok".into(), latency_ms: 0.1 },
+            BotEvent::TradeSignal("sig".into()),
+            BotEvent::Heartbeat,
+        ];
+        for event in &variants {
+            roundtrip_bot_event(event);
+        }
+        assert_eq!(variants.len(), 9, "All 9 BotEvent variants must be tested");
+    }
+}

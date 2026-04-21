@@ -49,7 +49,7 @@ impl ScenarioEngine {
             let shock = new_price - engine.market.mid_price;
             let synthetic_flow = shock / engine.config.price_impact_lambda;
             let mut rng = rand::thread_rng();
-            engine.market.advance(synthetic_flow, engine.config.price_impact_lambda, 0.0, &mut rng);
+            engine.market.advance(synthetic_flow, engine.config.price_impact_lambda, 0.0, 0.0, &mut rng, engine.config.max_drift_pct, engine.config.spread_bps_for(&engine.market.symbol));
         }
 
         engine.inject_sentiment(effect.sentiment);

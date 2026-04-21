@@ -185,4 +185,85 @@ mod tests {
         assert_eq!(state.attempt, 0);
         assert_eq!(state.current_delay, Duration::from_millis(500));
     }
+
+    /// Verify backoff grows with multiplier and caps at max_delay.
+    #[tokio::test]
+    async fn test_backoff_grows_exponentially_and_caps() {
+        let cfg = ReconnectConfig {
+            initial_delay: Duration::from_millis(100),
+            max_delay: Duration::from_millis(1000),
+            multiplier: 2.0,
+            max_attempts: Some(10),
+        };
+        let mut state = ReconnectState::new(cfg);
+
+        // After first wait, delay should double
+        let delay_before = state.current_delay;
+        let _ = state.wait().await;
+        assert!(state.current_delay > delay_before,
+            "Delay should grow after wait: before={:?}, after={:?}", delay_before, state.current_delay);
+
+        // Run through several iterations — delay should cap at max
+        for _ in 0..8 {
+            let _ = state.wait().await;
+        }
+        assert!(state.current_delay <= Duration::from_millis(1000),
+            "Delay should be capped at max: {:?}", state.current_delay);
+    }
+
+    /// Verify reset brings delay back to initial.
+    #[tokio::test]
+    async fn test_backoff_resets_to_initial() {
+        let cfg = ReconnectConfig {
+            initial_delay: Duration::from_millis(50),
+            max_delay: Duration::from_secs(10),
+            multiplier: 3.0,
+            max_attempts: None,
+        };
+        let mut state = ReconnectState::new(cfg);
+        let _ = state.wait().await;
+        let _ = state.wait().await;
+        assert!(state.current_delay > Duration::from_millis(50));
+        state.reset();
+        assert_eq!(state.current_delay, Duration::from_millis(50));
+        assert_eq!(state.attempt, 0);
+    }
+
+    /// Max attempts = 0 edge case — first wait should return false.
+    #[tokio::test]
+    async fn test_max_attempts_zero_immediately_fails() {
+        let cfg = ReconnectConfig {
+            max_attempts: Some(0),
+            initial_delay: Duration::from_millis(1),
+            ..ReconnectConfig::default()
+        };
+        let mut state = ReconnectState::new(cfg);
+        let should_continue = state.wait().await;
+        assert!(!should_continue, "max_attempts=0 should fail immediately");
+    }
+
+    /// No max_attempts → unlimited retries.
+    #[tokio::test]
+    async fn test_unlimited_retries() {
+        let cfg = ReconnectConfig {
+            max_attempts: None,
+            initial_delay: Duration::from_millis(1),
+            max_delay: Duration::from_millis(2),
+            multiplier: 1.0,
+        };
+        let mut state = ReconnectState::new(cfg);
+        for _ in 0..100 {
+            assert!(state.wait().await, "Unlimited retries should always continue");
+        }
+    }
+
+    /// Jitter function should return values in range [0, max_ms).
+    #[test]
+    fn test_rand_jitter_bounded() {
+        for _ in 0..100 {
+            let j = rand_jitter(1000);
+            assert!(j < 1000, "Jitter {} should be < 1000", j);
+        }
+        assert_eq!(rand_jitter(0), 0, "Jitter with max=0 should be 0");
+    }
 }

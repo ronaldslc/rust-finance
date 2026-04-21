@@ -13,7 +13,9 @@
 //   6. Position size normalisation (Kelly criterion cap)
 // ============================================================
 
-use ai::dexter::{DexterSignal, TradeDirection, Recommendation};
+use ai::dexter::{DexterSignal, TradeDirection};
+#[allow(unused_imports)]
+use ai::dexter::Recommendation;
 use swarm_sim::signal::{SwarmSignal, SignalDirection, Conviction};
 
 #[derive(Debug, Clone)]
@@ -222,7 +224,7 @@ fn build_hedge_order(signal: &DexterSignal, config: &RiskConfig) -> OrderRequest
 mod tests {
     use super::*;
     use ai::dexter::{DexterSignal, TradeDirection, TimeHorizon, Recommendation};
-    use swarm_sim::signal::{SwarmSignal, SignalDirection, Conviction, MarketRegime};
+    use swarm_sim::signal::{SwarmSignal, SignalDirection};
     
     struct MockQuant {
         garch_vol_forecast: f64
@@ -272,7 +274,9 @@ mod tests {
     #[test]
     fn vol_spike_triggers_hedge() {
         let mut quant = make_quant();
-        quant.garch_vol_forecast = 0.08; // 8% daily vol = above 4% breaker
+        // garch_vol_forecast is annualized; gate converts to daily via / √252.
+        // Need daily_vol > 0.04 breaker, so annualized > 0.04 * √252 ≈ 0.635.
+        quant.garch_vol_forecast = 0.80; // 80% annualized → 5.0% daily > 4% breaker
         let verdict = evaluate(&make_long_signal(), &make_bullish_swarm(), &quant);
         assert!(matches!(verdict, RiskVerdict::Hedge(_)));
     }
@@ -293,5 +297,98 @@ mod tests {
     fn kelly_sizing_is_bounded() {
         let order = build_order(&make_long_signal(), 0.04, &RiskConfig::default());
         assert!(order.notional_usd <= 100_000.0 * 0.05); // max 5% of NAV
+    }
+
+    /// When stop_loss == entry_price (zero risk distance), the `.max(0.001)` guard
+    /// prevents division by zero. Position size should still be bounded.
+    #[test]
+    fn test_kelly_zero_variance() {
+        let mut signal = make_long_signal();
+        signal.stop_loss = signal.entry_price; // zero distance
+        let config = RiskConfig::default();
+        let quant = make_quant();
+        let swarm = make_bullish_swarm();
+        let verdict = evaluate_with_config(&signal, &swarm, &quant, &config);
+        // Should not panic; should produce Approved or Rejected with bounded size
+        match verdict {
+            RiskVerdict::Approved(order) => {
+                assert!(order.notional_usd.is_finite() && order.notional_usd >= 0.0,
+                    "Zero-variance Kelly should produce finite size: {}", order.notional_usd);
+                assert!(order.notional_usd <= config.portfolio_nav * config.max_position_pct,
+                    "Must respect max position cap");
+            }
+            RiskVerdict::Rejected(_) => {} // Also acceptable
+            RiskVerdict::Hedge(_) => {}
+        }
+    }
+
+    /// When win probability is below breakeven, Kelly fraction should be ≤ 0,
+    /// which the `.max(0.0)` clamp catches. Position should be rejected or zero-sized.
+    #[test]
+    fn test_kelly_negative_edge() {
+        let mut signal = make_long_signal();
+        signal.confidence = 0.20; // way below breakeven
+        signal.take_profit = 910.0; // tiny reward
+        signal.stop_loss = 850.0;   // big risk
+        let config = RiskConfig::default();
+        let quant = make_quant();
+        let swarm = make_bullish_swarm();
+        let verdict = evaluate_with_config(&signal, &swarm, &quant, &config);
+        match verdict {
+            RiskVerdict::Rejected(reason) => {
+                // Expected — negative edge should produce tiny/rejected position
+                assert!(reason.contains("confidence") || reason.contains("too small"),
+                    "Should reject for low confidence or zero size, got: {}", reason);
+            }
+            RiskVerdict::Approved(order) => {
+                // If it somehow passes, the notional must be very small (kelly_f ≤ 0 → clamped to 0)
+                assert!(order.notional_usd < 1000.0,
+                    "Negative edge should produce minimal position: ${}", order.notional_usd);
+            }
+            _ => {}
+        }
+    }
+
+    /// At extreme confidence (0.99), position size must still respect max_position_pct (5%).
+    #[test]
+    fn test_kelly_extreme_confidence() {
+        let mut signal = make_long_signal();
+        signal.confidence = 0.99; // near certainty
+        signal.position_size_pct = 0.50; // asking for 50%
+        let config = RiskConfig::default();
+        let quant = make_quant();
+        let swarm = make_bullish_swarm();
+        let verdict = evaluate_with_config(&signal, &swarm, &quant, &config);
+        if let RiskVerdict::Approved(order) = verdict {
+            let position_pct = order.notional_usd / config.portfolio_nav;
+            assert!(position_pct <= config.max_position_pct + 0.001,
+                "Position {:.2}% exceeds max {:.2}%",
+                position_pct * 100.0, config.max_position_pct * 100.0);
+        }
+    }
+
+    /// Signal conflict between Dexter and Swarm must be rejected.
+    #[test]
+    fn test_signal_conflict_rejected() {
+        let signal = make_long_signal(); // Dexter says Long
+        let market = swarm_sim::market::MarketState::new("NVDA", 900.0);
+        let mut swarm = SwarmSignal::from_round(42, &market, 0.10, 0.75, 800_000.0);
+        swarm.direction = SignalDirection::Short; // Swarm says Short
+        let quant = make_quant();
+        let config = RiskConfig::default();
+        let verdict = evaluate_with_config(&signal, &swarm, &quant, &config);
+        assert!(matches!(verdict, RiskVerdict::Rejected(_)),
+            "Signal conflict should be rejected");
+    }
+
+    /// Neutral signal should be rejected.
+    #[test]
+    fn test_neutral_signal_rejected() {
+        let mut signal = make_long_signal();
+        signal.direction = TradeDirection::Neutral;
+        let swarm = make_bullish_swarm();
+        let quant = make_quant();
+        let verdict = evaluate(&signal, &swarm, &quant);
+        assert!(matches!(verdict, RiskVerdict::Rejected(_)));
     }
 }

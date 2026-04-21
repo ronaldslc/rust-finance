@@ -1,0 +1,42 @@
+# RustForge Terminal — Alacritty Configuration
+# This file ships with the installer and configures the bundled terminal.
+
+[window]
+dimensions = { columns = 220, lines = 55 }
+padding = { x = 4, y = 4 }
+decorations = "full"
+title = "RustForge Terminal"
+dynamic_title = false
+opacity = 0.97
+
+[font]
+normal = { family = "Cascadia Code NF", style = "Regular" }
+bold = { family = "Cascadia Code NF", style = "Bold" }
+size = 11.0
+
+[colors.primary]
+background = "#0a0c0f"
+foreground = "#c8d0dc"
+
+[colors.normal]
+black   = "#1e2530"
+red     = "#f87171"
+green   = "#4ade80"
+yellow  = "#f9a825"
+blue    = "#60a5fa"
+magenta = "#c084fc"
+cyan    = "#22d3ee"
+white   = "#c8d0dc"
+
+[colors.bright]
+black   = "#506470"
+red     = "#fca5a5"
+green   = "#86efac"
+yellow  = "#fbbf24"
+blue    = "#93c5fd"
+magenta = "#d8b4fe"
+cyan    = "#67e8f9"
+white   = "#f1f5f9"
+
+[shell]
+program = "tui.exe"

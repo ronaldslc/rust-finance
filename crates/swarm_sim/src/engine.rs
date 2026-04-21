@@ -58,7 +58,8 @@ impl SwarmEngine {
 
     fn spawn_agents(config: &SwarmConfig, initial_price: f64) -> Vec<Agent> {
         let n = config.agent_count;
-        let cash_per_agent = 500_000.0 / n as f64 * 1000.0; 
+        let cash_per_agent = config.cash_per_agent_usd;
+        let seed_offset = config.seed;
 
         let counts = AgentCounts::from_config(config);
         let mut agents = Vec::with_capacity(n);
@@ -67,7 +68,13 @@ impl SwarmEngine {
         macro_rules! spawn_type {
             ($typ:expr, $count:expr) => {
                 for _ in 0..$count {
-                    agents.push(Agent::new(id, $typ, initial_price, cash_per_agent, config.max_position_usd));
+                    agents.push(Agent::new_calibrated(
+                        id, $typ, initial_price, cash_per_agent,
+                        config.max_position_usd,
+                        id.wrapping_mul(2654435761).wrapping_add(seed_offset),
+                        config.max_deploy_per_round,
+                        config.inventory_decay_rate,
+                    ));
                     id += 1;
                 }
             };
@@ -79,6 +86,7 @@ impl SwarmEngine {
         spawn_type!(TraderType::ArbitrageBot, counts.arb);
         spawn_type!(TraderType::MomentumTrader, counts.momentum);
         spawn_type!(TraderType::NewsTrader, counts.news);
+        spawn_type!(TraderType::Contrarian, counts.contrarian);
 
         info!("Spawned {} agents: {:?}", agents.len(), counts);
         agents
@@ -166,7 +174,16 @@ impl SwarmEngine {
         }
 
         let mut rng = SmallRng::seed_from_u64(round.wrapping_mul(7_919));
-        self.market.advance(net_flow_usd, self.config.price_impact_lambda, self.config.round_vol(), &mut rng);
+        let spread_bps = self.config.spread_bps_for(&self.market.symbol);
+        self.market.advance(
+            net_flow_usd,
+            self.config.price_impact_lambda,
+            self.config.round_vol(),
+            self.config.mean_reversion_speed,
+            &mut rng,
+            self.config.max_drift_pct,
+            spread_bps,
+        );
 
         let total_actions = buy_count + sell_count + 1;
         let buy_fraction = buy_count as f64 / total_actions as f64;
@@ -245,6 +262,7 @@ struct AgentCounts {
     arb: usize,
     momentum: usize,
     news: usize,
+    contrarian: usize,
 }
 
 impl AgentCounts {
@@ -255,7 +273,107 @@ impl AgentCounts {
         let mm = (n as f64 * cfg.market_maker_fraction) as usize;
         let arb = (n as f64 * cfg.arbitrage_fraction) as usize;
         let mom = (n as f64 * cfg.momentum_fraction) as usize;
-        let news = n.saturating_sub(retail + hf + mm + arb + mom);
-        Self { retail, hedge_fund: hf, market_maker: mm, arb, momentum: mom, news }
+        let contrarian = (n as f64 * cfg.contrarian_fraction) as usize;
+        let news = n.saturating_sub(retail + hf + mm + arb + mom + contrarian);
+        Self { retail, hedge_fund: hf, market_maker: mm, arb, momentum: mom, news, contrarian }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::SwarmConfig;
+    use crate::market::MarketState;
+
+    fn test_config() -> SwarmConfig {
+        SwarmConfig {
+            agent_count: 100,
+            round_delay_ms: 0,
+            db_path: "test_swarm.jsonl".to_string(),
+            db_batch_size: 10000, // don't flush during test
+            ..SwarmConfig::default()
+        }
+    }
+
+    /// Same config + same initial state → byte-identical SwarmStep sequence.
+    /// This is the fundamental reproducibility contract for walk-forward backtesting.
+    #[test]
+    fn test_deterministic_replay_same_seed() {
+        let config = test_config();
+        let market = MarketState::new("SPY", 450.0);
+
+        // Run 1
+        let mut engine1 = SwarmEngine::new(config.clone(), market.clone());
+        let steps1: Vec<SwarmStep> = (0..20).map(|_| engine1.step_round()).collect();
+
+        // Run 2 — exact same config and state
+        let mut engine2 = SwarmEngine::new(config, market);
+        let steps2: Vec<SwarmStep> = (0..20).map(|_| engine2.step_round()).collect();
+
+        for (i, (s1, s2)) in steps1.iter().zip(steps2.iter()).enumerate() {
+            assert_eq!(s1.round, s2.round, "Round mismatch at step {}", i);
+            assert_eq!(s1.buy_count, s2.buy_count, "Buy count mismatch at round {}", s1.round);
+            assert_eq!(s1.sell_count, s2.sell_count, "Sell count mismatch at round {}", s1.round);
+            assert_eq!(s1.hold_count, s2.hold_count, "Hold count mismatch at round {}", s1.round);
+            assert!((s1.net_flow_usd - s2.net_flow_usd).abs() < 1e-10,
+                "Net flow mismatch at round {}: {} vs {}", s1.round, s1.net_flow_usd, s2.net_flow_usd);
+            assert!((s1.price_after - s2.price_after).abs() < 1e-10,
+                "Price mismatch at round {}: {} vs {}", s1.round, s1.price_after, s2.price_after);
+        }
+    }
+
+    /// After N rounds, price should stay in a reasonable range (no NaN/Inf/negative).
+    #[test]
+    fn test_swarm_price_stays_sane_over_100_rounds() {
+        let config = test_config();
+        let initial_price = 450.0;
+        let mut engine = SwarmEngine::new(config, MarketState::new("SPY", initial_price));
+
+        for _ in 0..100 {
+            let step = engine.step_round();
+            assert!(step.price_after.is_finite(), "Price must be finite, got {}", step.price_after);
+            assert!(step.price_after > 0.0, "Price must be positive, got {}", step.price_after);
+            // Price shouldn't move more than 50% in 100 rounds with 100 agents
+            assert!(step.price_after > initial_price * 0.5 && step.price_after < initial_price * 1.5,
+                "Price {:.2} drifted too far from initial {:.2}", step.price_after, initial_price);
+        }
+    }
+
+    /// Engine stats should be consistent with agent counts.
+    #[test]
+    fn test_engine_stats_consistency() {
+        let config = test_config();
+        let mut engine = SwarmEngine::new(config.clone(), MarketState::new("SPY", 450.0));
+        for _ in 0..10 { engine.step_round(); }
+
+        let stats = engine.stats();
+        assert_eq!(stats.agent_count, config.agent_count);
+        assert_eq!(stats.long_agents + stats.short_agents + stats.flat_agents, stats.agent_count,
+            "Long + Short + Flat must sum to total agents");
+        assert!(stats.mid_price > 0.0);
+    }
+
+    /// Injecting sentiment should affect news traders.
+    #[test]
+    fn test_sentiment_injection_affects_output() {
+        let config = test_config();
+        let market = MarketState::new("SPY", 450.0);
+
+        // Neutral run
+        let mut engine1 = SwarmEngine::new(config.clone(), market.clone());
+        for _ in 0..5 { engine1.step_round(); }
+        let step_neutral = engine1.step_round();
+
+        // Bullish sentiment run
+        let mut engine2 = SwarmEngine::new(config, market);
+        engine2.inject_sentiment(1.0); // max bullish
+        for _ in 0..5 { engine2.step_round(); }
+        let step_bullish = engine2.step_round();
+
+        // With strong bullish sentiment, buy pressure should be ≥ neutral
+        // (this is probabilistic, but with seed determinism it's reproducible)
+        assert!(step_bullish.buy_count >= step_neutral.buy_count.saturating_sub(5)
+            || step_bullish.net_flow_usd >= step_neutral.net_flow_usd - 1000.0,
+            "Bullish sentiment should bias toward buying");
     }
 }

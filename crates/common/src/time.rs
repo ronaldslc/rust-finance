@@ -272,3 +272,137 @@ impl Clock for DeterministicClock {
         "DeterministicClock"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Replaying the same event sequence must produce identical SequenceId streams.
+    #[test]
+    fn test_deterministic_clock_replay_produces_identical_sequence() {
+        let events = vec![
+            UnixNanos::from_secs(1000),
+            UnixNanos::from_secs(1001),
+            UnixNanos::from_secs(1002),
+            UnixNanos::from_secs(1005),
+            UnixNanos::from_secs(1010),
+        ];
+
+        // Run 1
+        let clock = DeterministicClock::new();
+        let seq_gen = SequenceGenerator::new();
+        let mut run1_ids = Vec::new();
+        for &ts in &events {
+            clock.set(ts);
+            run1_ids.push((clock.now(), seq_gen.next_id()));
+        }
+
+        // Run 2 — reset and replay
+        clock.reset();
+        seq_gen.reset();
+        let mut run2_ids = Vec::new();
+        for &ts in &events {
+            clock.set(ts);
+            run2_ids.push((clock.now(), seq_gen.next_id()));
+        }
+
+        assert_eq!(run1_ids.len(), run2_ids.len());
+        for (i, ((ts1, seq1), (ts2, seq2))) in run1_ids.iter().zip(run2_ids.iter()).enumerate() {
+            assert_eq!(ts1, ts2, "Timestamp mismatch at event {}", i);
+            assert_eq!(seq1, seq2, "SequenceId mismatch at event {}", i);
+        }
+    }
+
+    /// DeterministicClock::set() going backward must panic in debug mode.
+    #[test]
+    #[should_panic(expected = "DeterministicClock moved backward")]
+    #[cfg(debug_assertions)]
+    fn test_deterministic_clock_backward_panics() {
+        let clock = DeterministicClock::new();
+        clock.set(UnixNanos::from_secs(100));
+        clock.set(UnixNanos::from_secs(50)); // backward → panic
+    }
+
+    /// RealtimeClock.now() must always return > 0.
+    #[test]
+    fn test_realtime_clock_never_zero() {
+        let clock = RealtimeClock;
+        let ts = clock.now();
+        assert!(!ts.is_zero(), "RealtimeClock should never return zero");
+        assert!(ts.as_u64() > 1_000_000_000_000_000_000,
+            "RealtimeClock timestamp looks too small: {}", ts.as_u64());
+    }
+
+    /// SequenceGenerator reset() should restart from 1.
+    #[test]
+    fn test_sequence_generator_reset() {
+        let gen = SequenceGenerator::new();
+        let first = gen.next_id();
+        assert_eq!(first.as_u64(), 1);
+        let second = gen.next_id();
+        assert_eq!(second.as_u64(), 2);
+
+        gen.reset();
+        let after_reset = gen.next_id();
+        assert_eq!(after_reset.as_u64(), 1, "After reset, should restart from 1");
+    }
+
+    /// Both clock types must satisfy the trait contract.
+    #[test]
+    fn test_clock_trait_contract_parity() {
+        // DeterministicClock
+        let det = DeterministicClock::new();
+        det.set(UnixNanos::from_secs(42));
+        assert_eq!(det.now().as_u64(), UnixNanos::from_secs(42).as_u64());
+        assert_eq!(det.clock_type(), "DeterministicClock");
+
+        // RealtimeClock
+        let rt = RealtimeClock;
+        assert!(!rt.now().is_zero());
+        assert_eq!(rt.clock_type(), "RealtimeClock");
+    }
+
+    /// SequenceGenerator is monotonically increasing.
+    #[test]
+    fn test_sequence_generator_monotonic() {
+        let gen = SequenceGenerator::new();
+        let mut prev = gen.next_id();
+        for _ in 0..100 {
+            let curr = gen.next_id();
+            assert!(curr > prev, "SequenceId must be strictly increasing");
+            prev = curr;
+        }
+    }
+
+    /// UnixNanos arithmetic correctness.
+    #[test]
+    fn test_unix_nanos_ops() {
+        let a = UnixNanos::from_secs(10);
+        let b = UnixNanos::from_secs(3);
+        assert_eq!(a - b, 7_000_000_000);
+        assert_eq!(a.as_millis(), 10_000);
+        assert_eq!(a.as_micros(), 10_000_000);
+        assert_eq!(a.delta(b), 7_000_000_000);
+        assert_eq!(b.delta(a), -7_000_000_000);
+    }
+
+    /// Envelope ordering uses (ts_event, sequence_id).
+    #[test]
+    fn test_envelope_ordering() {
+        use crate::events::*;
+        let e1 = Envelope::new(
+            UnixNanos::from_secs(1), UnixNanos::from_secs(1),
+            SequenceId::new(1), "first",
+        );
+        let e2 = Envelope::new(
+            UnixNanos::from_secs(1), UnixNanos::from_secs(1),
+            SequenceId::new(2), "second",
+        );
+        let e3 = Envelope::new(
+            UnixNanos::from_secs(2), UnixNanos::from_secs(2),
+            SequenceId::new(1), "third",
+        );
+        assert!(e1 < e2, "Same timestamp → sort by sequence_id");
+        assert!(e2 < e3, "Different timestamp → sort by timestamp");
+    }
+}

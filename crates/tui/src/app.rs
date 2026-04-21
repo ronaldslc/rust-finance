@@ -194,7 +194,7 @@ impl App {
         Self {
             screen: initial_screen,
             should_quit: false,
-            connection_status: "Connecting...".to_string(),
+            connection_status: "Standalone Mode (no daemon)".to_string(),
             show_help: false,
             paper_mode: true, // Default to paper mode for safety
             active_panel: 0,
@@ -206,18 +206,21 @@ impl App {
             order_price_input: String::new(),
             dialog_order_type: DialogOrderType::Market,
 
-            chart_data: Vec::new(),
-            volume_data: Vec::new(),
+            chart_data: generate_mock_prices(),
+            volume_data: generate_mock_volumes(),
             chart_state: ChartState::default(),
             chart_stats: ChartStats {
-                last_price: 0.0,
-                high_price: 0.0,
+                last_price: 1461.98,
+                high_price: 1461.98,
                 high_date: "".to_string(),
-                low_price: 0.0,
+                low_price: 1400.0,
                 low_date: "".to_string(),
-                average: 0.0,
-                volume: 0.0,
-                volume_smavg: 0.0,
+                average: 1430.0,
+                volume: 11502.2,
+                volume_smavg: 48.048,
+                market_cap: 74392.0,
+                price_change: 0.031,
+                price_change_pct: 2.92,
             },
 
             watchlist: default_watchlist(),
@@ -261,9 +264,9 @@ impl App {
 
             // Mirofish (enhanced) — fixed to sum to 100%
             mirofish_running: true,
-            mirofish_rally_pct: 42.0,
-            mirofish_sideways_pct: 35.0,
-            mirofish_dip_pct: 23.0,
+            mirofish_rally_pct: 70.0,
+            mirofish_sideways_pct: 27.0,
+            mirofish_dip_pct: 3.0,
             mirofish_agent_count: 5_000,
             mirofish_sim_time_ms: 847.3,
             mirofish_order_imbalance: 0.23,
@@ -463,9 +466,9 @@ impl App {
         self.push_alert(&format!("Mirofish {}-agent simulation started.", self.mirofish_agent_count));
         self.mirofish_running = true;
         // Simulate realistic scenario probabilities summing to 100%
-        self.mirofish_rally_pct = 42.0;
-        self.mirofish_sideways_pct = 35.0;
-        self.mirofish_dip_pct = 23.0;
+        self.mirofish_rally_pct = 70.0;
+        self.mirofish_sideways_pct = 27.0;
+        self.mirofish_dip_pct = 3.0;
         self.mirofish_agent_agreement = 72.0;
         self.mirofish_bias_detected = false;
         self.mirofish_sim_time_ms = 847.3;
@@ -693,7 +696,7 @@ fn default_positions() -> Vec<PositionEntry> {
         PositionEntry { symbol: "NVDA".into(), holding: 100.00, pnl_pct: 1.53 },
         PositionEntry { symbol: "NVDA".into(), holding: 50.00, pnl_pct: 1.15 },
         PositionEntry { symbol: "TSLA".into(), holding: 0.00, pnl_pct: -0.23 },
-        PositionEntry { symbol: "CNBC".into(), holding: -10.00, pnl_pct: -0.27 },
+        PositionEntry { symbol: "AMZN".into(), holding: -10.00, pnl_pct: -0.27 },
     ]
 }
 
@@ -744,9 +747,34 @@ fn default_exchanges() -> Vec<ExchangeInfo> {
         ExchangeInfo { name: ExchangeName::NYSE, status: ExchangeStatus::Connected, latency_ms: 12.5, last_heartbeat: None },
         ExchangeInfo { name: ExchangeName::NASDAQ, status: ExchangeStatus::Connected, latency_ms: 15.2, last_heartbeat: None },
         ExchangeInfo { name: ExchangeName::CME, status: ExchangeStatus::Connected, latency_ms: 8.4, last_heartbeat: None },
-        ExchangeInfo { name: ExchangeName::CBOE, status: ExchangeStatus::Degraded, latency_ms: 250.0, last_heartbeat: None },
-        ExchangeInfo { name: ExchangeName::LSE, status: ExchangeStatus::Disabled, latency_ms: 0.0, last_heartbeat: None },
+        ExchangeInfo { name: ExchangeName::CBOE, status: ExchangeStatus::Connected, latency_ms: 8.1, last_heartbeat: None },
+        ExchangeInfo { name: ExchangeName::LSE, status: ExchangeStatus::Connected, latency_ms: 22.3, last_heartbeat: None },
         ExchangeInfo { name: ExchangeName::CRYPTO, status: ExchangeStatus::Connected, latency_ms: 45.1, last_heartbeat: None },
     ]
 }
 
+fn generate_mock_prices() -> Vec<(f64, f64)> {
+    let mut data = Vec::with_capacity(200);
+    let mut seed: u64 = 42;
+    for i in 0..200 {
+        let t = i as f64 / 200.0;
+        let base = 1400.0 + t * 62.0;
+        let wave = (t * std::f64::consts::PI * 6.0).sin() * 15.0;
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let noise = ((seed >> 33) as f64 / 2147483648.0 - 0.5) * 8.0;
+        data.push((i as f64, base + wave + noise));
+    }
+    if let Some(last) = data.last_mut() { last.1 = 1461.98; }
+    data
+}
+
+fn generate_mock_volumes() -> Vec<(f64, f64)> {
+    let mut data = Vec::with_capacity(200);
+    let mut seed: u64 = 12345;
+    for i in 0..200 {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let v = ((seed >> 33) as f64 / 2147483648.0) * 80.0 + 20.0;
+        data.push((i as f64, v));
+    }
+    data
+}
