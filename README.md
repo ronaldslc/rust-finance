@@ -45,7 +45,11 @@ RustForge is an institutional-grade AI trading terminal built in pure Rust. It c
 | Language | Pure Rust |
 | Interface | Full TUI Dashboard (Ratatui, 6 screens) |
 | AI Integration | Claude-powered Dexter Analyst |
-| Prediction Markets | Polymarket CLOB with EIP-712 signing |
+| Execution Algorithms | TWAP, VWAP, Iceberg, POV — Bloomberg EMSX-grade slicing |
+| Market Making | Avellaneda-Stoikov optimal quoting with VPIN toxicity detection |
+| Microstructure | OFI, Microprice, Kyle's Lambda, VPIN, Amihud, Lee-Ready |
+| Smart Order Router | Multi-venue scoring (fill rate, latency, fees, impact) |
+| Prediction Markets | Polymarket CLOB + cross-platform arbitrage engine |
 | Agent Simulation | 100K-agent Rayon-parallel swarm |
 | Knowledge Graph | petgraph-backed RAG engine |
 | Risk Models | GARCH(1,1) + VaR + Kill Switch + Interceptor Chain |
@@ -129,21 +133,21 @@ graph TD;
 ```
 common           Nanosecond timestamps, events, config, models
 ingestion        Multi-source market data (Alpaca, Binance, Finnhub, Polymarket)
-execution        Trait-based ExecutionGateway, AlpacaExecutor
-strategy         Strategy trait, momentum, mean-reversion engines
+execution        ExecutionGateway + TWAP/VWAP/Iceberg/POV algos + Smart Order Router
+strategy         Momentum, MeanReversion, Avellaneda-Stoikov market maker
 risk             Kill switch, GARCH vol, VaR, risk interceptor chain
 pricing          Black-Scholes-Merton, Heston, GARCH(1,1) models
 backtest         Walk-forward, Monte Carlo, backtesting engine
 ai               Dexter AI analyst, Claude integration, signal routing
 swarm_sim        100,000-agent market microstructure simulator
 knowledge_graph  petgraph-backed RAG knowledge engine
-polymarket       Polymarket (3 APIs: Gamma, CLOB, Data) + EIP-712 signing
+polymarket       CLOB + EIP-712 signing + sum-to-one/cross-platform arb engine
 daemon           Hybrid intelligence pipeline, engine orchestration
 event_bus        Postcard-serialized TCP event bus (daemon <-> TUI)
 tui              Ratatui-powered 6-screen trading dashboard
 oms              Order Management System (netting + hedging)
 alerts           Rule-based alert engine
-signals          Technical indicator signal generation
+signals          Technical indicators + OFI, Microprice, Kyle's Lambda, VPIN
 compliance       Pre-trade compliance, audit trail
 persistence      PostgreSQL + SQLite persistence layer
 metrics          Prometheus-compatible telemetry
@@ -217,10 +221,16 @@ cargo run -p tui --release
 - **Impact Analysis Engine** — AI-driven market impact estimation
 - **Mirofish** — 5,000-agent scenario simulator (rally/sideways/dip probabilities)
 
-### Execution
+### Execution & Algorithmic Trading
 - `ExecutionGateway` trait — plug-and-play execution backends
+- **TWAP** — Time-weighted slicing with configurable `horizon_secs` / `interval_secs`
+- **VWAP** — Volume-weighted execution with U-shape intraday profile
+- **Iceberg** — Hidden liquidity: only `display_qty` visible, auto-replenish on fill
+- **POV (Percentage of Volume)** — Adaptive participation tracking real-time market volume
+- **Smart Order Router (SOR)** — Multi-venue scoring (fill rate, latency, fees, liquidity, market impact), dark pool preference for large orders, spray routing, MiFID II best execution reporting
 - **Alpaca Executor** — Full REST integration (25+ endpoints: orders, positions, assets, historical data)
 - **Polymarket CLOB** — full order lifecycle (limit/market/FOK/GTC/GTD), EIP-712 signed orders
+- **Polymarket Arbitrage** — Sum-to-one (YES+NO < $1), cross-market, and cross-platform (Polymarket vs Kalshi) spread detection with fee-aware P&L
 - **Polymarket BTC 15-Min** — Crypto prediction markets (BTC Up/Down, ETH, SOL, XRP, DOGE)
 - **Paper trading** — MockExecutor for risk-free strategy testing
 - **Bracket orders** — OCO/OTO stop-loss + take-profit combos
@@ -240,6 +250,17 @@ cargo run -p tui --release
 - **Regime Detection** — GARCH-based volatility regime classification
 - Max Drawdown and Daily Loss Limit trading guardrails
 - **SEBI Compliance** — order variety classification and regulatory compliance (India)
+
+### Market Making & Microstructure
+- **Avellaneda-Stoikov Market Maker** — Optimal quoting: `r = s - q·γ·σ²·(T-t)`, `δ = γσ²τ + (2/γ)·ln(1 + γ/κ)`
+- **VPIN Toxicity Detection** — Volume-synchronized Probability of Informed Trading; auto-widen spreads above threshold
+- **Inventory Skew** — Asymmetric quotes to manage directional exposure
+- **Order Flow Imbalance (OFI)** — Cont et al. (2014) — net bid/ask volume change for short-term direction
+- **Microprice** — Size-weighted midpoint; ~50-tick lead over arithmetic mid
+- **Kyle's Lambda** — Price impact coefficient per unit signed order flow
+- **Amihud Illiquidity** — `|return| / dollar_volume` for position sizing in thin names
+- **Lee-Ready Classifier** — Buyer/seller-initiated trade classification
+- **EWMA Volatility** — Real-time annualized vol estimation (RiskMetrics λ=0.94)
 
 ### Quantitative Models
 - **Black-Scholes-Merton** — options pricing with full Greeks (Delta, Gamma, Theta, Vega, Rho)
