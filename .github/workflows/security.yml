@@ -147,6 +147,10 @@ jobs:
         run: |
           MISSING=""
           for lib in crates/*/src/lib.rs; do
+            # Skip vendored third-party crates that legitimately use unsafe
+            case "$lib" in
+              *curve25519-dalek-patch*) continue ;;
+            esac
             if ! grep -q 'forbid(unsafe_code)' "$lib"; then
               MISSING="$MISSING\n  MISSING: $lib"
             fi

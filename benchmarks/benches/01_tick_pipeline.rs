@@ -32,7 +32,9 @@ unsafe fn tsc_stop() -> u64 {
 
 fn tsc_to_ns(cycles: u64) -> u64 {
     let freq = TSC_FREQ_MHZ.load(Ordering::Relaxed);
-    if freq == 0 { return cycles; }
+    if freq == 0 {
+        return cycles;
+    }
     (cycles * 1_000) / freq
 }
 
@@ -71,9 +73,12 @@ pub struct OrderBook {
 impl OrderBook {
     pub fn new() -> Self {
         Self {
-            bids: [0.0; 128], asks: [0.0; 128],
-            bid_sizes: [0.0; 128], ask_sizes: [0.0; 128],
-            best_bid_idx: 0, best_ask_idx: 0,
+            bids: [0.0; 128],
+            asks: [0.0; 128],
+            bid_sizes: [0.0; 128],
+            ask_sizes: [0.0; 128],
+            best_bid_idx: 0,
+            best_ask_idx: 0,
         }
     }
 
@@ -97,7 +102,11 @@ pub fn compute_imbalance_signal(book: &OrderBook) -> f64 {
     let bid_vol: f64 = book.bid_sizes.iter().take(5).sum();
     let ask_vol: f64 = book.ask_sizes.iter().take(5).sum();
     let total = bid_vol + ask_vol;
-    if total > 0.0 { bid_vol / total } else { 0.5 }
+    if total > 0.0 {
+        bid_vol / total
+    } else {
+        0.5
+    }
 }
 
 #[inline(always)]
@@ -108,33 +117,49 @@ pub fn full_pipeline(book: &mut OrderBook, tick: &MarketTick) -> f64 {
 
 fn bench_order_book_update(c: &mut Criterion) {
     let tick = MarketTick {
-        symbol_id: 1, price: 175.50, size: 100.0,
-        bid: 175.49, ask: 175.51, timestamp_ns: 1_700_000_000_000,
+        symbol_id: 1,
+        price: 175.50,
+        size: 100.0,
+        bid: 175.49,
+        ask: 175.51,
+        timestamp_ns: 1_700_000_000_000,
     };
     let mut book = OrderBook::new();
 
     c.bench_function("order_book_update", |b| {
-        b.iter(|| { book.update(black_box(&tick)); });
+        b.iter(|| {
+            book.update(black_box(&tick));
+        });
     });
 }
 
 fn bench_full_pipeline(c: &mut Criterion) {
     let tick = MarketTick {
-        symbol_id: 1, price: 175.50, size: 100.0,
-        bid: 175.49, ask: 175.51, timestamp_ns: 1_700_000_000_000,
+        symbol_id: 1,
+        price: 175.50,
+        size: 100.0,
+        bid: 175.49,
+        ask: 175.51,
+        timestamp_ns: 1_700_000_000_000,
     };
     let mut book = OrderBook::new();
 
     c.bench_function("full_tick_pipeline", |b| {
-        b.iter(|| { black_box(full_pipeline(&mut book, black_box(&tick))); });
+        b.iter(|| {
+            black_box(full_pipeline(&mut book, black_box(&tick)));
+        });
     });
 }
 
 fn bench_tsc_hdr_histogram(c: &mut Criterion) {
     calibrate_tsc();
     let tick = MarketTick {
-        symbol_id: 1, price: 175.50, size: 100.0,
-        bid: 175.49, ask: 175.51, timestamp_ns: 0,
+        symbol_id: 1,
+        price: 175.50,
+        size: 100.0,
+        bid: 175.49,
+        ask: 175.51,
+        timestamp_ns: 0,
     };
     let mut book = OrderBook::new();
 
@@ -148,7 +173,10 @@ fn bench_tsc_hdr_histogram(c: &mut Criterion) {
         });
         println!(
             "\n[tick_pipeline] P50={} ns | P99={} ns | P999={} ns | max={} ns",
-            hist.value_at_quantile(0.50), hist.value_at_quantile(0.99), hist.value_at_quantile(0.999), hist.max(),
+            hist.value_at_quantile(0.50),
+            hist.value_at_quantile(0.99),
+            hist.value_at_quantile(0.999),
+            hist.max(),
         );
     });
 }
