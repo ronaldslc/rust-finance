@@ -104,9 +104,9 @@ pub mod serializer {
                 if pair.is_empty() {
                     continue;
                 }
-                let eq_pos = pair.find('=').ok_or_else(|| {
-                    FixError::Parse(format!("Missing '=' in field: {}", pair))
-                })?;
+                let eq_pos = pair
+                    .find('=')
+                    .ok_or_else(|| FixError::Parse(format!("Missing '=' in field: {}", pair)))?;
                 let tag: u32 = pair[..eq_pos]
                     .parse()
                     .map_err(|_| FixError::Parse(format!("Invalid tag: {}", &pair[..eq_pos])))?;
@@ -265,7 +265,9 @@ pub mod serializer {
             }
 
             // Expect "10=" at body_end
-            if self.buffer.get(checksum_region_start..checksum_region_start + 3)
+            if self
+                .buffer
+                .get(checksum_region_start..checksum_region_start + 3)
                 != Some(b"10=")
             {
                 // Malformed — skip this message start and try again
@@ -316,9 +318,7 @@ pub mod serializer {
 
             // After a SOH
             for i in 0..self.buffer.len().saturating_sub(prefix_bytes.len()) {
-                if self.buffer[i] == 0x01
-                    && self.buffer[i + 1..].starts_with(prefix_bytes)
-                {
+                if self.buffer[i] == 0x01 && self.buffer[i + 1..].starts_with(prefix_bytes) {
                     return Some(i + 1);
                 }
             }
@@ -342,11 +342,17 @@ pub mod serializer {
         }
 
         fn skip_past_equals(&self, pos: usize) -> Option<usize> {
-            self.buffer[pos..].iter().position(|&b| b == b'=').map(|p| pos + p + 1)
+            self.buffer[pos..]
+                .iter()
+                .position(|&b| b == b'=')
+                .map(|p| pos + p + 1)
         }
 
         fn find_soh_after(&self, pos: usize) -> Option<usize> {
-            self.buffer[pos..].iter().position(|&b| b == 0x01).map(|p| pos + p)
+            self.buffer[pos..]
+                .iter()
+                .position(|&b| b == 0x01)
+                .map(|p| pos + p)
         }
     }
 
@@ -417,20 +423,10 @@ pub mod serializer {
 
         #[test]
         fn test_multiple_messages() {
-            let msg1 = build_fix_message(&[
-                (8, "FIX.4.4"),
-                (35, "0"),
-                (49, "A"),
-                (56, "B"),
-                (34, "1"),
-            ]);
-            let msg2 = build_fix_message(&[
-                (8, "FIX.4.4"),
-                (35, "5"),
-                (49, "A"),
-                (56, "B"),
-                (34, "2"),
-            ]);
+            let msg1 =
+                build_fix_message(&[(8, "FIX.4.4"), (35, "0"), (49, "A"), (56, "B"), (34, "1")]);
+            let msg2 =
+                build_fix_message(&[(8, "FIX.4.4"), (35, "5"), (49, "A"), (56, "B"), (34, "2")]);
 
             let mut parser = FixParser::new();
             parser.push_bytes(&msg1);
@@ -445,18 +441,16 @@ pub mod serializer {
 
         #[test]
         fn test_incomplete_message_returns_none() {
-            let raw = build_fix_message(&[
-                (8, "FIX.4.4"),
-                (35, "0"),
-                (49, "A"),
-                (56, "B"),
-                (34, "1"),
-            ]);
+            let raw =
+                build_fix_message(&[(8, "FIX.4.4"), (35, "0"), (49, "A"), (56, "B"), (34, "1")]);
 
             let mut parser = FixParser::new();
             // Push only half the bytes
             parser.push_bytes(&raw[..raw.len() / 2]);
-            assert!(parser.next_message().is_none(), "Incomplete should return None");
+            assert!(
+                parser.next_message().is_none(),
+                "Incomplete should return None"
+            );
 
             // Push the rest
             parser.push_bytes(&raw[raw.len() / 2..]);

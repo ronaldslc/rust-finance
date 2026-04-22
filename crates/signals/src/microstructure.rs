@@ -422,7 +422,11 @@ mod tests {
 
         // Bid size increases, ask size decreases → buying pressure
         let val = ofi.update(100.0, 800.0, 101.0, 200.0);
-        assert!(val > 0.0, "OFI should be positive for buying pressure: {}", val);
+        assert!(
+            val > 0.0,
+            "OFI should be positive for buying pressure: {}",
+            val
+        );
     }
 
     #[test]
@@ -433,7 +437,11 @@ mod tests {
 
         // Ask size increases, bid size decreases → selling pressure
         let val = ofi.update(100.0, 200.0, 101.0, 800.0);
-        assert!(val < 0.0, "OFI should be negative for selling pressure: {}", val);
+        assert!(
+            val < 0.0,
+            "OFI should be negative for selling pressure: {}",
+            val
+        );
     }
 
     #[test]

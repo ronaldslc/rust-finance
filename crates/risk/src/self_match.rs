@@ -144,11 +144,7 @@ mod tests {
     use common::events::{OrderSide, OrderType};
     use execution::gateway::TimeInForce;
 
-    fn make_state_with_resting(
-        symbol: &str,
-        side: OrderSide,
-        price: f64,
-    ) -> EngineState {
+    fn make_state_with_resting(symbol: &str, side: OrderSide, price: f64) -> EngineState {
         EngineState {
             total_equity: 100_000.0,
             daily_pnl: 0.0,

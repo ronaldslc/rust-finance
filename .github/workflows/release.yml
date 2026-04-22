@@ -17,21 +17,25 @@ jobs:
             artifact: rustforge-windows-x64
             tui_bin: tui.exe
             daemon_bin: daemon.exe
+            ext: .exe
           - os: macos-13
             target: x86_64-apple-darwin
             artifact: rustforge-macos-intel
             tui_bin: tui
             daemon_bin: daemon
+            ext: ""
           - os: macos-13
             target: aarch64-apple-darwin
             artifact: rustforge-macos-arm64
             tui_bin: tui
             daemon_bin: daemon
+            ext: ""
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact: rustforge-linux-x64
             tui_bin: tui
             daemon_bin: daemon
+            ext: ""
 
     runs-on: ${{ matrix.os }}
 
@@ -49,14 +53,31 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
+
+          # Copy binaries to dist/
           cp target/${{ matrix.target }}/release/${{ matrix.tui_bin }} dist/
           cp target/${{ matrix.target }}/release/${{ matrix.daemon_bin }} dist/
           cp installer/alacritty.toml dist/ 2>/dev/null || true
 
+          # Create renamed standalone binaries for direct download
+          # e.g. rustforge-tui-windows-x64.exe, rustforge-daemon-linux-x64
+          mkdir -p standalone
+          cp target/${{ matrix.target }}/release/${{ matrix.tui_bin }} \
+            standalone/rustforge-tui-${{ matrix.artifact }}${{ matrix.ext }}
+          cp target/${{ matrix.target }}/release/${{ matrix.daemon_bin }} \
+            standalone/rustforge-daemon-${{ matrix.artifact }}${{ matrix.ext }}
+
+      # Upload the dist/ directory (used by the release job to create archives)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.artifact }}
           path: dist/
+
+      # Upload standalone binaries (direct .exe / binary downloads)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: standalone-${{ matrix.artifact }}
+          path: standalone/
 
   release:
     needs: build
@@ -66,16 +87,28 @@ jobs:
         with:
           path: artifacts
 
-      - name: Create archives
+      - name: Create archives and collect standalone binaries
         run: |
           cd artifacts
-          for dir in */; do
+
+          # Create archives (zip for Windows, tar.gz for others)
+          for dir in rustforge-*/; do
             name="${dir%/}"
+            # Skip standalone-* directories
+            if [[ "$name" == standalone-* ]]; then
+              continue
+            fi
             if [[ "$name" == *"windows"* ]]; then
               (cd "$name" && zip -r "../${name}.zip" .)
             else
               tar -czf "${name}.tar.gz" -C "$name" .
             fi
+          done
+
+          # Collect standalone binaries into a flat directory
+          mkdir -p release-binaries
+          for dir in standalone-*/; do
+            cp "$dir"/* release-binaries/ 2>/dev/null || true
           done
 
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
@@ -84,3 +117,4 @@ jobs:
           files: |
             artifacts/*.zip
             artifacts/*.tar.gz
+            artifacts/release-binaries/*

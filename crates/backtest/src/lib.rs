@@ -24,4 +24,3 @@ pub use robustness::{
     ReproducibilityProof,
 };
 pub use strategy::{SimpleMovingAverageCrossover, Strategy, StrategySignal, ZScoreMeanReversion};
-

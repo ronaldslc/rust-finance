@@ -12,10 +12,7 @@ all-features = true
 
 # ── Advisories (CVE / RUSTSEC) ────────────────────────────────
 [advisories]
-vulnerability = "deny"        # hard-fail on known CVEs
-unmaintained = "warn"
-yanked = "deny"
-notice = "warn"
+version = 2
 ignore = []                   # e.g. ["RUSTSEC-2024-XXXX"]
 
 # ── Licenses ──────────────────────────────────────────────────

@@ -205,7 +205,11 @@ impl VwapAlgo {
 
     /// Create with a U-shaped volume profile (typical equity market).
     /// High volume at open and close, lower in midday.
-    pub fn with_u_shape(parent: ParentOrder, num_buckets: usize, bucket_duration_secs: u64) -> Self {
+    pub fn with_u_shape(
+        parent: ParentOrder,
+        num_buckets: usize,
+        bucket_duration_secs: u64,
+    ) -> Self {
         let profile: Vec<f64> = (0..num_buckets)
             .map(|i| {
                 let t = i as f64 / (num_buckets - 1).max(1) as f64;
@@ -523,9 +527,7 @@ mod tests {
                 AlgoAction::Done => break,
                 AlgoAction::Wait => panic!("Iceberg should not wait"),
             }
-            if fills > 20 {
-                panic!("Too many fills without completing");
-            }
+            assert!(fills <= 20, "Too many fills without completing");
         }
         assert_eq!(fills, 10, "Should take exactly 10 fills of 50 to fill 500");
     }

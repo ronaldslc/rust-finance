@@ -38,7 +38,6 @@ pub struct SebiConfig {
     pub price_band_pct: f64,
 
     // ── SEBI 2026 Algo Framework (mandatory since April 1, 2026) ────────
-
     /// Exchange-assigned Algo-ID. Must be tagged on every order to NSE/BSE.
     /// Obtained from your broker after SEBI algo registration.
     pub algo_id: Option<String>,
@@ -117,7 +116,6 @@ pub enum SebiViolation {
     InvalidCoverOrder { sl_pct: f64 },
 
     // ── SEBI 2026 Algo Framework violations ──────────────────────────────
-
     #[error("SEBI 2026: Algo-ID not configured. Set `algo_id` in SebiConfig. All algo orders to NSE/BSE require an exchange-assigned Algo-ID since April 1, 2026.")]
     AlgoIdMissing,
 
@@ -483,18 +481,10 @@ mod tests {
         }
 
         // The 4th order should trigger OPS violation
-        let result = compliance.check(
-            "SBIN",
-            false,
-            10.0,
-            700.0,
-            &OrderVariety::Cnc,
-            now,
-        );
+        let result = compliance.check("SBIN", false, 10.0, 700.0, &OrderVariety::Cnc, now);
         assert!(
             matches!(result, Err(SebiViolation::OpsThresholdExceeded { .. })),
             "Should reject when OPS exceeds threshold"
         );
     }
 }
-

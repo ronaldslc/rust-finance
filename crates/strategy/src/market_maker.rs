@@ -136,12 +136,7 @@ impl AvellanedaStoikov {
     }
 
     /// Feed a new mid-price observation and produce a quoting decision.
-    pub fn on_tick(
-        &mut self,
-        mid_price: f64,
-        elapsed_secs: f64,
-        vpin: Option<f64>,
-    ) -> MakerAction {
+    pub fn on_tick(&mut self, mid_price: f64, elapsed_secs: f64, vpin: Option<f64>) -> MakerAction {
         self.session_elapsed_secs = elapsed_secs;
 
         if let Some(v) = vpin {
@@ -392,16 +387,18 @@ mod tests {
 
         // Normal VPIN
         mm.on_tick(100.0, 0.0, Some(0.3));
-        let normal_spread = if let MakerAction::UpdateQuotes(q) = mm.on_tick(100.0, 100.0, Some(0.3)) {
-            q.optimal_spread
-        } else {
-            panic!("Expected quote");
-        };
+        let normal_spread =
+            if let MakerAction::UpdateQuotes(q) = mm.on_tick(100.0, 100.0, Some(0.3)) {
+                q.optimal_spread
+            } else {
+                panic!("Expected quote");
+            };
 
         // High VPIN
         let mut mm2 = AvellanedaStoikov::new(MarketMakerConfig::default());
         mm2.on_tick(100.0, 0.0, Some(0.8));
-        let wide_spread = if let MakerAction::UpdateQuotes(q) = mm2.on_tick(100.0, 100.0, Some(0.8)) {
+        let wide_spread = if let MakerAction::UpdateQuotes(q) = mm2.on_tick(100.0, 100.0, Some(0.8))
+        {
             q.optimal_spread
         } else {
             panic!("Expected quote");

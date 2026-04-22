@@ -232,7 +232,8 @@ impl ArbScanner {
         let fees = self.fees.get(platform_key)?;
 
         // Fee on both legs
-        let total_fee = fees.taker_fee * 2.0 + fees.gas_cost_usd * 2.0 / market.liquidity_usd.max(1.0);
+        let total_fee =
+            fees.taker_fee * 2.0 + fees.gas_cost_usd * 2.0 / market.liquidity_usd.max(1.0);
         let net_spread = gross_spread - total_fee;
 
         if net_spread < self.min_net_spread {
@@ -400,7 +401,10 @@ mod tests {
         let opp = &opps[0];
         assert!(matches!(opp.arb_type, ArbType::SumToOne));
         assert!(opp.gross_spread > 0.04, "Gross spread should be ~5%");
-        assert!(opp.net_spread > 0.0, "Net spread should be positive after fees");
+        assert!(
+            opp.net_spread > 0.0,
+            "Net spread should be positive after fees"
+        );
     }
 
     #[test]
@@ -412,7 +416,10 @@ mod tests {
         scanner.update_market(market);
 
         let opps = scanner.scan();
-        let sum_to_one: Vec<_> = opps.iter().filter(|o| matches!(o.arb_type, ArbType::SumToOne)).collect();
+        let sum_to_one: Vec<_> = opps
+            .iter()
+            .filter(|o| matches!(o.arb_type, ArbType::SumToOne))
+            .collect();
         assert!(sum_to_one.is_empty(), "No arb when YES+NO >= 1.0");
     }
 

@@ -166,7 +166,11 @@ impl SmartOrderRouter {
             .filter(|v| v.is_available)
             .map(|v| {
                 let score = self.score_venue(v, order_size, is_passive);
-                let fee = if is_passive { v.maker_fee_bps } else { v.taker_fee_bps };
+                let fee = if is_passive {
+                    v.maker_fee_bps
+                } else {
+                    v.taker_fee_bps
+                };
                 let impact = v.impact_per_1k_bps * (order_size / 1000.0).sqrt();
 
                 RoutingDecision {
@@ -186,7 +190,11 @@ impl SmartOrderRouter {
             .collect();
 
         // Sort by score descending (higher = better)
-        decisions.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        decisions.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         decisions
     }
 
@@ -245,7 +253,11 @@ impl SmartOrderRouter {
         let latency_score = (1.0 - (venue.latency_p95_us / 10_000.0).min(1.0)).max(0.0);
 
         // Fee: lower is better. Rebates (negative) get high scores.
-        let fee = if is_passive { venue.maker_fee_bps } else { venue.taker_fee_bps };
+        let fee = if is_passive {
+            venue.maker_fee_bps
+        } else {
+            venue.taker_fee_bps
+        };
         let fee_score = (1.0 - (fee + 5.0) / 20.0).clamp(0.0, 1.0); // -5bps rebate = 0.5, +15bps = 0.0
 
         // Liquidity: more is better, logarithmic scaling

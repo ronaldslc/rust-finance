@@ -131,8 +131,12 @@ impl AlphaMonitor {
         }
 
         // Rank signals
-        let mut signal_indexed: Vec<(usize, f64)> =
-            self.history.iter().enumerate().map(|(i, (s, _))| (i, *s)).collect();
+        let mut signal_indexed: Vec<(usize, f64)> = self
+            .history
+            .iter()
+            .enumerate()
+            .map(|(i, (s, _))| (i, *s))
+            .collect();
         signal_indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         let mut signal_ranks = vec![0.0; n];
         for (rank, (idx, _)) in signal_indexed.iter().enumerate() {
@@ -140,8 +144,12 @@ impl AlphaMonitor {
         }
 
         // Rank returns
-        let mut return_indexed: Vec<(usize, f64)> =
-            self.history.iter().enumerate().map(|(i, (_, r))| (i, *r)).collect();
+        let mut return_indexed: Vec<(usize, f64)> = self
+            .history
+            .iter()
+            .enumerate()
+            .map(|(i, (_, r))| (i, *r))
+            .collect();
         return_indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         let mut return_ranks = vec![0.0; n];
         for (rank, (idx, _)) in return_indexed.iter().enumerate() {
@@ -205,8 +213,7 @@ impl AlphaMonitor {
         }
 
         // Either below degraded threshold → Degraded
-        if ic < self.config.ic_degraded_threshold
-            || sharpe < self.config.sharpe_degraded_threshold
+        if ic < self.config.ic_degraded_threshold || sharpe < self.config.sharpe_degraded_threshold
         {
             return AlphaHealth::Degraded;
         }
@@ -280,7 +287,9 @@ mod tests {
         // This produces negative IC, which has low absolute value area
         // Use a shuffled pattern to ensure near-zero correlation
         let signals = [3.0, 7.0, 1.0, 9.0, 5.0, 2.0, 8.0, 4.0, 10.0, 6.0];
-        let returns = [0.01, -0.01, 0.005, -0.005, 0.01, -0.01, 0.005, -0.005, 0.01, -0.01];
+        let returns = [
+            0.01, -0.01, 0.005, -0.005, 0.01, -0.01, 0.005, -0.005, 0.01, -0.01,
+        ];
         for _ in 0..10 {
             for (s, r) in signals.iter().zip(returns.iter()) {
                 monitor.record(*s, *r);

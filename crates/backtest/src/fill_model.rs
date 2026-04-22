@@ -32,12 +32,7 @@ pub trait FillModel: Send {
     /// `bar`: the current market bar (provides volume, spread info)
     ///
     /// Returns the adjusted fill price and simulated latency.
-    fn simulate_fill(
-        &self,
-        order_qty: f64,
-        reference_price: f64,
-        bar: &Bar,
-    ) -> FillResult;
+    fn simulate_fill(&self, order_qty: f64, reference_price: f64, bar: &Bar) -> FillResult;
 }
 
 // ─── Fixed Slippage (backward compat) ────────────────────────────
@@ -62,12 +57,7 @@ impl FixedSlippage {
 }
 
 impl FillModel for FixedSlippage {
-    fn simulate_fill(
-        &self,
-        order_qty: f64,
-        reference_price: f64,
-        _bar: &Bar,
-    ) -> FillResult {
+    fn simulate_fill(&self, order_qty: f64, reference_price: f64, _bar: &Bar) -> FillResult {
         let slippage = if order_qty > 0.0 {
             reference_price * self.rate
         } else {
@@ -151,12 +141,7 @@ impl SquareRootImpact {
 }
 
 impl FillModel for SquareRootImpact {
-    fn simulate_fill(
-        &self,
-        order_qty: f64,
-        reference_price: f64,
-        bar: &Bar,
-    ) -> FillResult {
+    fn simulate_fill(&self, order_qty: f64, reference_price: f64, bar: &Bar) -> FillResult {
         let abs_qty = order_qty.abs();
         let sign = if order_qty > 0.0 { 1.0 } else { -1.0 };
 
@@ -212,8 +197,14 @@ mod tests {
         let model = FixedSlippage::default_1bp();
         let bar = make_bar(100.0, 1_000_000.0);
         let result = model.simulate_fill(100.0, 100.0, &bar);
-        assert!(result.fill_price > 100.0, "Buy should have positive slippage");
-        assert!((result.fill_price - 100.01).abs() < 0.001, "1bp of 100 = 0.01");
+        assert!(
+            result.fill_price > 100.0,
+            "Buy should have positive slippage"
+        );
+        assert!(
+            (result.fill_price - 100.01).abs() < 0.001,
+            "1bp of 100 = 0.01"
+        );
     }
 
     #[test]
@@ -221,7 +212,10 @@ mod tests {
         let model = FixedSlippage::default_1bp();
         let bar = make_bar(100.0, 1_000_000.0);
         let result = model.simulate_fill(-100.0, 100.0, &bar);
-        assert!(result.fill_price < 100.0, "Sell should have negative slippage");
+        assert!(
+            result.fill_price < 100.0,
+            "Sell should have negative slippage"
+        );
     }
 
     #[test]
